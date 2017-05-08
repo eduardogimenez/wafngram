@@ -1,0 +1,36 @@
+Positive:
+
+Histogram 
+time ./counter.native -format http -uudecoded -input test/cisc2010/normalTrafficTraining_uudecoded.txt -print-field-score scores.txt -config config/cisc2010.txt
+
+ 
+Negative (10%):
+time ./counter.native -format http -uudecoded -input test/cisc2010/normalTrafficTraining_uudecoded.txt -fraction 10 -test-set Detect test/cisc2010/anomalousTrafficTest_uudecoded.txt -config config.txt -output output-abnormal-10pc.txt
+
+Negative (full):
+time ./counter.native -format http -uudecoded -input test/cisc2010/normalTrafficTraining_uudecoded.txt -fraction 1 -test-set Detect test/cisc2010/anomalousTrafficTest_uudecoded.txt -config config.txt -output output-abnormal-full.txt
+time ./counter.native -format waflog -uudecoded -input test/fing/dataset_procesado.txt -load-model model.bin -fraction 1 -test-abnormal Detect -config fing-config.txt
+
+Weka Field Model Positive:
+time ./counter.native -format http -uudecoded -input test/cisc2010/normalTrafficTraining_uudecoded.txt -no-ngram-model -print-arff-model field-model.arff -config config.txt
+time ./counter.native -format waflog -uudecoded -input test/fing/dataset_procesado.txt -no-ngram-model -print-arff-model field-model.arff -config fing-config.txt
+
+
+Weka Field Model Negative:
+time ./counter.native -format http -uudecoded -input test/cisc2010/anomalousTrafficTest_uudecoded.txt -no-ngram-model -print-arff-model abnormal.arff -config config.txt
+
+Weka Ngram Model Output:
+time ./counter.native -format http -uudecoded -input test/cisc2010/normalTrafficTraining_uudecoded.txt -print-weka-model ngram-model.arff -test-set ExportAsAbnormal test/cisc2010/anomalousTrafficTest_uudecoded.txt -config config.txt
+
+Distrib Output:
+time ./counter.native -format http -uudecoded -input test/cisc2010/normalTrafficTraining_uudecoded.txt -print-field-distrib field-distrib.csv -config config.txt
+
+Marshal model:
+time ./counter.native -format http   -uudecoded -input test/cisc2010/normalTrafficTraining_uudecoded.txt -save-model model.bin -config config.txt
+time ./counter.native -format waflog -uudecoded -input test/fing/dataset_procesado.txt -save-model model.bin -config fing-config.txt
+
+Testing from previous model:
+time ./counter.native -format http -uudecoded -input test/cisc2010/normalTrafficTraining_uudecoded.txt -load-model model.bin -autotest -fraction 10 -test-set Detect test/cisc2010/anomalousTrafficTest_uudecoded.txt -config config.txt
+
+
+

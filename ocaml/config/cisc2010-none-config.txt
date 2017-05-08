@@ -1,0 +1,12 @@
+HEADER
+
+NgramLength   = 1
+MinimumNgramMean = 0.01 0.009 0.003
+MinimumUrlMean   = 0.01
+MinimumDistance  = 0.1 0.1 0.1
+Verbose   = true
+IdOnly    = false
+Inversion = false
+
+FIELDS
+

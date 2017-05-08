@@ -1,0 +1,31 @@
+HEADER
+
+NgramLength   = 2
+MinimumNgramMean = 0.01 0.009 0.003
+MinimumUrlMean   = 0.01
+MinimumDistance  = 0.1 0.1 0.1
+Verbose   = true
+IdOnly    = true
+Inversion = true
+
+FIELDS
+
+Field 0
+Tokenization Exclude 
+end
+
+Field 1
+Tokenization Exclude 
+end
+
+Field 4
+Tokenization Exclude 
+end
+
+Field 5
+Subfields    "&" "="
+end
+
+Field 6
+Subfields    "&" "="
+end

@@ -1,0 +1,101 @@
+HEADER
+
+NgramLength   = 3
+MinimumNgramMean = 0.01 0.009 0.003
+MinimumUrlMean   = 0.01
+MinimumDistance  = 0.1 0.1 0.1
+Verbose   = true
+IdOnly    = true
+Inversion = true
+Prior = "prior/spanish_trigrams.txt"
+
+FIELDS
+
+Field 2
+Tokenization Delimiter "/" 1
+Method       NumberInField
+end
+
+Field 3
+Subfields    "&" "="
+end
+
+Field 3 password
+Tokenization Exclude
+end
+
+Field 3 apellidos
+Method       Rank
+end
+
+Field 53 apellidos
+Method       FrequencyInField Spanish
+end
+
+Field 3 direccion
+Method       FrequencyInField Spanish
+end
+
+Field 53 direccion
+Method       FrequencyInField Spanish
+end
+
+Field 3 ciudad
+Method       FrequencyInField Spanish
+end
+
+Field 53 ciudad
+Method       FrequencyInField Spanish
+end
+
+Field 53 password
+Tokenization Exclude
+end
+
+Field 3 pwd
+Tokenization Ngram 1
+end
+
+Field 53 pwd
+Tokenization Ngram 1
+end
+
+Field 53 email
+Tokenization Ngram 1
+Method       FrequencyInField
+end
+
+Field 3 email
+Tokenization Ngram 1
+Method       FrequencyInField
+end
+
+Field 53 dni
+Tokenization Ngram 1
+Method       FrequencyInField
+end
+
+Field 3 dni
+Tokenization Ngram 1
+Method       FrequencyInField
+end
+
+Field 53
+Subfields    "&" "="
+end
+
+Field 53 password
+Tokenization Exclude
+end
+
+Field 20
+Tokenization Exclude
+end
+
+Field 3 login
+Tokenization Ngram 1
+end
+
+Field 53 login
+Tokenization Ngram 1
+end

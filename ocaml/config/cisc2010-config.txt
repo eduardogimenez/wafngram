@@ -1,0 +1,101 @@
+HEADER
+
+NgramLength   = 3
+MinimumNgramMean = 0.01 0.009 0.003
+MinimumUrlMean   = 0.01
+MinimumDistance  = 0.1 0.1 0.1
+Verbose   = true
+IdOnly    = false
+Inversion = false
+Prior = "prior/spanish_trigrams.txt"
+
+FIELDS
+
+Field Uri
+Tokenization Delimiter "/" 1
+Method       NumberInField
+end
+
+Field Query
+Subfields    "&" "="
+end
+
+Field Body
+Subfields    "&" "="
+end
+
+Field Query password
+Tokenization Exclude
+end
+
+Field Body password
+Tokenization Exclude
+end
+
+Field Query apellidos
+Method       Mahalanobis Spanish
+end
+
+Field Body apellidos
+Method       Mahalanobis Spanish
+end
+
+Field Query direccion
+Method       Mahalanobis Spanish
+end
+
+Field Body direccion
+Method       Mahalanobis Spanish
+end
+
+Field Query ciudad
+Method       Mahalanobis Spanish
+end
+
+Field Body ciudad
+Method       Mahalanobis Spanish
+end
+
+Field Query pwd
+Tokenization Exclude
+end
+
+Field Body pwd
+Tokenization Exclude
+end
+
+Field Query email
+Tokenization Ngram 1
+Method       FrequencyInField
+end
+
+Field Body email
+Tokenization Ngram 1
+Method       FrequencyInField
+end
+
+Field Query dni
+Tokenization Ngram 1
+Method       FrequencyInField
+end
+
+Field Body dni
+Tokenization Ngram 1
+Method       FrequencyInField
+end
+
+Field Body password
+Tokenization Exclude
+end
+
+Field Cookie
+Tokenization Exclude
+end
+
+Field Query login
+Tokenization Ngram 1
+end
+
+Field Body login
+Tokenization Ngram 1
+end
