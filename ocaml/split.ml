@@ -53,7 +53,7 @@ let main () =
        begin
 	 List.iter (fun id -> Printf.fprintf stdout "%s\n" id) attrl;
 	 let newabs = Splitter.split abs !defSep !defSym !field attrl in
-	 let Arff.Values l = newabs.Arff.data in
+	 let l = match newabs.Arff.data with Arff.Values l -> l | _ -> raise (Invalid_argument "main: not Values") in
 	 begin
 	   (*List.iteri (fun i inst  -> Printf.fprintf stdout "Instance %d, length %d\n" i (Array.length inst)) l;*)
 	 (try

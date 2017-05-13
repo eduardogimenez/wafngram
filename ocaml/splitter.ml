@@ -75,7 +75,7 @@ let split file defsep defsym pos attrl =
 	attributes=
 	  (let completedattrs = List.concat [attrl;["Remaining"]] in
 	   let newattrbs = List.map (fun id -> (id,StringType)) completedattrs in 
-	   let (prev,post) = splitAtNth (pos+1) file.header.attributes []
+	   let (prev,post) = splitAtNth (pos+1) file.header.attributes
 	   in List.concat [prev;newattrbs;post]);
 	constants=file.header.constants};
      data   =

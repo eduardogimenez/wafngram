@@ -8,22 +8,24 @@ let tl l =
   | [] -> []
   | _::l1 -> l1
 
-let rec splitAtNth n l1 l2 =
+let splitAtNth n l1 =
+  let rec loop n l1 l2 =
     if n=0
-  then (List.rev (tl l2),l1)
-  else 
-    match l1 with
+    then (List.rev (tl l2),l1)
+    else 
+      match l1 with
     | []    -> (List.rev l2,l1)
-    |  h::t -> splitAtNth (n-1) t (h::l2)
-
+    |  h::t -> loop (n-1) t (h::l2)
+  in loop n l1 []
+	  
 let removeSegment n m l =
-  let (pre,mid) = splitAtNth (n+1) l [] in
-  let (_, post) = splitAtNth (m-n) mid []
+  let (pre,mid) = splitAtNth (n+1) l in
+  let (_, post) = splitAtNth (m-n) mid
   in (pre, post)
 
 let getSegment n m l =
-  let (pre,mid) = splitAtNth  n l [] in
-  let (seg,_)   = splitAtNth (m-n+2) mid []
+  let (pre,mid) = splitAtNth  n l in
+  let (seg,_)   = splitAtNth (m-n+2) mid
   in seg
 
        

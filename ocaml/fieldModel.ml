@@ -85,7 +85,8 @@ let elim2 f1 f2 t tk =
   match t,tk with
   | (StringTries t1),(String str) -> f1 t1 str
   | (UrlTries    t2),(Url l)      -> f2 t2 l
-  | _, String str -> raise (Invalid_argument str) 
+  | _, (String str)               -> raise (Invalid_argument str)
+  | _, (Url l)                    -> raise (Invalid_argument (String.concat "/" l))
 
 			   
 (* Samples a real value associated to an ngram. *)
@@ -116,8 +117,8 @@ let toList =
         (UrlTries.toList    (fun l   -> Url l))
 
 (* Transforms the collected data into the field model to be used for testing. *) 
-let buildFieldModel confld fldmdl =
-  match confld.countmthd with
+let buildFieldModel countmthd fldmdl =
+  match countmthd with
 (*
   | GlobalCount ->
      let len = float_of_int (Hashtbl.fold (fun ngrm d n -> d.num + n) fldmdl 0)
@@ -129,14 +130,15 @@ let buildFieldModel confld fldmdl =
 	    sigmanum=d.sigmanum /. len;num=d.num})
 	  fldmdl
  *)
-  | Rank        -> 
+  | Rank prior    ->
+     let l = toList fldmdl in
      let sortedl = 
        List.sort
 	 (fun (_,d1) (_,d2) ->
 	  let n = d1.mean in
 	  let m = d2.mean 
 	  in if n<m then 1 else if n=m then 0 else -1)
-	 (toList fldmdl) in
+	  l in
      let rankedl = Listlib.rank (fun n -> n) (fun (ngrm,d) n -> (ngrm,n)) sortedl
      in List.iter (fun (ngrm,n) -> replace fldmdl ngrm (Distrib.singleton (float_of_int n))) rankedl
   | _ -> ()

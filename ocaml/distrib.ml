@@ -88,5 +88,9 @@ let round x n =
 
 let printHistogram out d =
   Hashtbl.iter (fun r n -> Printf.fprintf out "%.3f\t" (round r 3)) d.histogram
-		 
+
+let print out d =
+  Printf.fprintf out "mean=%f, stdv=%f, minval=%f, maxval=%f, num=%d, histogram=%a" d.mean (stdDev d) d.minval d.maxval d.num printHistogram d
+	     
+
 

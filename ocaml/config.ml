@@ -85,7 +85,22 @@ type countMethod =
   | GlobalCount
   (* Computes the distance with respect to a rank of the most used ngrams in the field 
      all along the instances. *)
-  | Rank
+  | Rank of language option
+  (* Only considers the aplhabet used, without considering frequencies *)
+  | Alphabet of language option
+(* Computes the simplified Mahalanobis distance respecto to each n-gram. *)
+  | Mahalanobis of language option
+
+let defaultMethod = ref (Rank None)
+			
+let printCountMethod out mthd =
+  match mthd with
+  | NumberInField         -> Printf.fprintf out "NumberInField"
+  | FrequencyInField lang -> Printf.fprintf out "FrequencyInField"
+  | GlobalCount           -> Printf.fprintf out "GlobalCount"
+  | Rank  lang            -> Printf.fprintf out "Rank"
+  | Mahalanobis  lang     -> Printf.fprintf out "Mahablanobis"
+  | Alphabet     lang     -> Printf.fprintf out "Alphabet"
       
 (* Options for a single field *)
 type fieldSpec = {
@@ -98,7 +113,7 @@ type fieldSpec = {
 let default () = {
   tokenization = Ngram !length;
   subfields    = None;
-  countmthd    = FrequencyInField None
+  countmthd    = !defaultMethod;
 }
 
 type fieldConfig = (Http.field,fieldSpec) Hashtbl.t
@@ -118,6 +133,11 @@ let create () = (Hashtbl.create 53:fieldConfig)
 let add conf fld fldc = Hashtbl.replace conf fld fldc
 
 let print out conf =
-  Hashtbl.iter
-    (fun fld confld ->
-     Printf.fprintf out "Field %a Tokenization %a\n" Http.printField fld printTokenization confld.tokenization) conf 
+  begin
+    printHeader out conf.header;
+    Hashtbl.iter
+      (fun fld confld ->
+       Printf.fprintf out "Field %a Tokenization %a Method %a\n" Http.printField fld printTokenization confld.tokenization printCountMethod confld.countmthd) conf.fields;
+    flush out;
+    close_out out
+  end

@@ -17,8 +17,11 @@ let langOfString str =
   | _ -> raise UndefinedLanguage
 			     
 let frequencies:FieldModel.t array = Array.init maxlang (fun _ -> FieldModel.create (Config.Ngram !Config.length))
+
+let rank:FieldModel.t array = Array.init maxlang (fun _ -> FieldModel.create (Config.Ngram !Config.length))
 			     
 let getDictionnary lan = frequencies.(langIndex lan)
+let getRank        lan = rank.(langIndex lan)
 
 let addNgram fldmdl str v = countNgram fldmdl (abstract str) (float_of_int v)
 

@@ -47,12 +47,7 @@ let singleFieldExtraction confld fld str mdl =
   in
   match confld.tokenization with
   | Exclude -> ()
-  | Delimiter (sep,n) -> (*
-     let lstr  = Str.split (Str.regexp sep) str in
-     begin
-       countNgram fldmdl (FieldModel.Url lstr) 1.0;
-       Hashtbl.replace mdl fld {length=Distrib.sample d (float_of_int len);occurrences=fldmdl}
-     end*)
+  | Delimiter (sep,n) ->
      let lstr  = Str.split (Str.regexp sep) str in
      let astr  = Array.of_list lstr in
      if len = 0 then ()
@@ -86,38 +81,38 @@ let singleFieldExtraction confld fld str mdl =
 	     Hashtbl.iter (fun ngram occ -> countNgram fldmdl ngram (float_of_int occ)) count;
 	     Hashtbl.replace mdl fld {length=Distrib.sample d (float_of_int len);occurrences=fldmdl}
 	   end)
-       | Ngram n ->
-	  if len = 0 then ()
-	  else
-	    (* len => 1 and it is assumed that n => 1 *)
-	    let n = min n len in (* We cannot extrat ngrams larger than the field length: redefine n if necessary *)
-	    let nbngrams = len-n +1 in (* nbngram > 0 *)
-	    match confld.countmthd with 
-	    | FrequencyInField _ -> 
-	       let count = Hashtbl.create ~random:false nbngrams in   
-	       begin
-		 for i = 0 to len-1 do 
-		   let ngram = try String.sub str i (min n (len-i)) with Invalid_argument _ -> str
-		   in countOcurrence count (abstract ngram)  
-		 done;
-		 Hashtbl.iter
-		   (fun ngram occ -> FieldModel.countNgramFrequency fldmdl ngram len (float_of_int occ)) count;
-		 FieldModel.iter
-		   (fun ngram v ->
-		    if not(Hashtbl.mem count ngram) then FieldModel.countOnlyThisNgram fldmdl ngram 0.0) fldmdl;
-		 Hashtbl.replace mdl fld {length=Distrib.sample d (float_of_int len);occurrences=fldmdl}
-	       end
-	    | GlobalCount -> raise NotSupported
-	    | _ -> 
-	       let count = Hashtbl.create ~random:false nbngrams in   
-	       begin
-		 for i = 0 to len-1 do 
-		   let ngram = try String.sub str i (min n (len-i)) with Invalid_argument _ -> str
-		   in countOcurrence count (abstract ngram)  
-		 done;
-		 Hashtbl.iter (fun ngram occ -> countNgram fldmdl ngram (float_of_int occ)) count;
-		 Hashtbl.replace mdl fld {length=Distrib.sample d (float_of_int len);occurrences=fldmdl}
-	       end
+  | Ngram n ->
+     if len = 0 then ()
+     else
+       (* len => 1 and it is assumed that n => 1 *)
+       let n = min n len in (* We cannot extrat ngrams larger than the field length: redefine n if necessary *)
+       let nbngrams = len-n +1 in (* nbngram > 0 *)
+       match confld.countmthd with 
+       | FrequencyInField _ -> 
+	  let count = Hashtbl.create ~random:false nbngrams in   
+	  begin
+	    for i = 0 to len-1 do 
+	      let ngram = try String.sub str i (min n (len-i)) with Invalid_argument _ -> str
+	      in countOcurrence count (abstract ngram)  
+	    done;
+	    Hashtbl.iter
+	      (fun ngram occ -> FieldModel.countNgramFrequency fldmdl ngram len (float_of_int occ)) count;
+	    FieldModel.iter
+	      (fun ngram v ->
+	       if not(Hashtbl.mem count ngram) then FieldModel.countOnlyThisNgram fldmdl ngram 0.0) fldmdl;
+	    Hashtbl.replace mdl fld {length=Distrib.sample d (float_of_int len);occurrences=fldmdl}
+	  end
+       | GlobalCount -> raise NotSupported
+       | _ -> 
+	  let count = Hashtbl.create ~random:false nbngrams in   
+	  begin
+	    for i = 0 to len-1 do 
+	      let ngram = try String.sub str i (min n (len-i)) with Invalid_argument _ -> str
+	      in countOcurrence count (abstract ngram)  
+	    done;
+	    Hashtbl.iter (fun ngram occ -> countNgram fldmdl ngram (float_of_int occ)) count;
+	    Hashtbl.replace mdl fld {length=Distrib.sample d (float_of_int len);occurrences=fldmdl}
+	  end
 		 
 (********************************************************************************************)
 (* Extraction algorithm.                                                                   *)
@@ -179,8 +174,6 @@ let extractTestFileModel conf testfile =
   | _        -> raise (Invalid_argument "extractTestFileModel: should be a Values model")
 
 		  
-let trainRanking mdl fldmdl = ()
-  
 exception MethodIncompatibleWithTokenization of Config.tokenization	  
 let buildModel conf isTestMdl mdl =
   begin
@@ -188,18 +181,20 @@ let buildModel conf isTestMdl mdl =
       (fun fld entry ->
        let confld = Config.get conf fld
        in  match confld.countmthd with
-           | Rank ->
-	      begin
-		trainRanking mdl entry.occurrences;
-		buildFieldModel confld entry.occurrences
-	      end
+           | Rank lang ->
+	      (match confld.tokenization with
+	       | Exclude -> ()
+	       | Ngram n -> 
+		  begin
+		    buildFieldModel confld.countmthd entry.occurrences
+		  end
+	       | x -> raise (MethodIncompatibleWithTokenization x))
 	   | FrequencyInField lang ->
 	      (match confld.tokenization with
 	       | Exclude -> ()
 	       | Ngram n -> 
 		  begin
-		    (if not isTestMdl then Prior.load lang entry.occurrences);
-		    buildFieldModel confld entry.occurrences
+		    buildFieldModel confld.countmthd entry.occurrences
 		  end
 	       | x -> raise (MethodIncompatibleWithTokenization x))
 	   | _ -> ())
@@ -208,54 +203,119 @@ let buildModel conf isTestMdl mdl =
   end
 
 (*********************************************************************)
-    
+
+
+type abnormal =
+  | UnknownModelField of Http.field
+  | BadLength    of float*float*float*float
+  | BadFrequency of token*float*float*float*float*float
+  | BadScore     of field*float*float*float*float*float
+
+
+module Mahalanobis = struct
+
+  let score prior fldmdl fldmdltest =
+    FieldModel.fold
+      (fun n1 n2 -> n1 +. n2)
+      (fun ngrm d2 n ->
+       let  d1 = try (FieldModel.find fldmdl ngrm)
+		 with Not_found ->
+		  (match prior with
+		   | Some lan -> (try FieldModel.find (Prior.getDictionnary lan) ngrm
+				  with Not_found -> Distrib.singleton 0.0)
+		   | None     -> Distrib.singleton 0.0)
+       in  ((abs_float (d1.mean -. d2.mean)) /. ((Distrib.stdDev d1) +. 1.0))  +. n)
+      fldmdltest 0.0 
+      
+  let distance prior fld fldmdl fldmdltest smdl =
+    let  sc = (score prior fldmdl fldmdltest) in
+    let dsc = Distrib.singleton sc in
+    let  gl = Hashtbl.find smdl fld
+    in if Distrib.outlier gl dsc then [BadScore(fld,sc,gl.mean,Distrib.stdDev gl,gl.minval,gl.maxval)] else []  
+end
+					
+
+module Alphabet = struct
+
+  let score prior fldmdl fldmdltest =
+    FieldModel.fold
+      (fun n1 n2 -> n1 +. n2)
+      (fun ngrm d2 n ->
+       let  r1 = if FieldModel.mem fldmdl ngrm then 0.0 else 1.0
+       in   r1 +. n)
+      fldmdltest 0.0 
+      
+  let distance prior fld fldmdl fldmdltest smdl =
+    let  sc = (score prior fldmdl fldmdltest) in
+    let dsc = Distrib.singleton sc in
+    let  gl = Hashtbl.find smdl fld
+    in if Distrib.outlier gl dsc then [BadScore(fld,sc,gl.mean,Distrib.stdDev gl,gl.minval,gl.maxval)] else []
+													      
+end
+		       
 module Rank = struct
   
   type t = (Http.field, Distrib.t) Hashtbl.t
   let create () = ((Hashtbl.create ~random:false 200):t)
 
-
-
-  let score fldmdl fldmdltest =
+  let score prior fldmdl fldmdltest =
     FieldModel.fold
       (fun n1 n2 -> n1 +. n2)
       (fun ngrm d2 n ->
-       let  r1 = try (FieldModel.find fldmdl ngrm).mean
-		 with Not_found -> float_of_int (FieldModel.size fldmdl)
+       let  r1 = try (FieldModel.find fldmdl ngrm).mean						  
+	       with Not_found ->
+		 (try (match prior with
+		       |(Some lan) -> (FieldModel.find (Prior.getRank lan) ngrm).mean
+		       | None      -> infinity)
+		  with Not_found -> infinity)
+		   (*		 with Not_found -> float_of_int (FieldModel.size fldmdl) *)
        in  (abs_float (r1 -. d2.mean)) +. n)
       fldmdltest 0.0 
-		     
-  let goals conf mdl ltest =
-    let smdl = create () in
-    begin
-      List.iter
-	(fun test ->
-	 Hashtbl.iter
-	   (fun fld att ->
-	    let sc = try score (Hashtbl.find mdl fld).occurrences att.occurrences with Not_found -> infinity in
-	    let d  = try (Distrib.sample (Hashtbl.find smdl fld) sc) with Not_found -> Distrib.singleton sc
-	    in  Hashtbl.replace smdl fld d)
-	    test)
-	ltest;
-      smdl
-    end
       
-  let outlier confld fld fldmdl fldmdltest smdl =
-    let sc = Distrib.singleton (score fldmdl fldmdltest) in
-    let gl = Hashtbl.find smdl fld
-    in [Distrib.outlier gl sc]
+  let distance prior fld fldmdl fldmdltest smdl =
+    let  sc = (score prior fldmdl fldmdltest) in
+    let dsc = Distrib.singleton sc in
+    let  gl = Hashtbl.find smdl fld
+    in if Distrib.outlier gl dsc then [BadScore(fld,sc,gl.mean,Distrib.stdDev gl,gl.minval,gl.maxval)] else []
 	 
-  let printScore out smdl =
-    begin
-      List.iter (fun r -> Printf.fprintf out "%f\n" r) [10.0;20.0;30.0;40.0;50.0;60.0;70.0;80.0;90.0;100.0];
-      Printf.fprintf out "\n";
-      Hashtbl.iter
-	(fun fld d -> Printf.fprintf out "%a\t%a\n" fld Http.printField Distrib.printHistogram d)
-	smdl
-    end
-      
-	 end
+end
+		
+let score confld fldmdl fldmdltest =
+  match confld.countmthd with
+  | Rank prior        -> Rank.score        prior fldmdl fldmdltest
+  | Alphabet prior    -> Alphabet.score    prior fldmdl fldmdltest
+  | Mahalanobis prior -> Mahalanobis.score prior fldmdl fldmdltest
+  | _                 -> 0.0 (* does not use scores *)
 
+let printScore out smdl =
+  begin
+    List.iter (fun r -> Printf.fprintf out "%f\n" r) [10.0;20.0;30.0;40.0;50.0;60.0;70.0;80.0;90.0;100.0];
+    Printf.fprintf out "\n";
+    Hashtbl.iter
+	(fun fld d -> Printf.fprintf out "%a\t%a\n" Http.printField fld Distrib.print d)
+	smdl;
+    flush out;
+    close_out out
+  end
+
+let goals conf mdl linst =
+  let smdl = Rank.create () in
+  begin
+    List.iter
+      (fun inst ->
+       let test = (buildModel conf.fields true (instanceExtraction conf.fields inst (emptyTestModel ()))) in
+       Hashtbl.iter
+	 (fun fld att ->
+	  let confld = Config.get conf.fields fld in
+	  let sc = score confld (Hashtbl.find mdl fld).occurrences att.occurrences (*with Not_found -> infinity*) in
+	  let d  = try (Distrib.sample (Hashtbl.find smdl fld) sc) with Not_found -> Distrib.singleton sc
+	  in  Hashtbl.replace smdl fld d)
+	 test)
+      linst;
+    smdl
+  end
+
+	      
 (**********************************************************)
 
 (* Assigns an ordinal to each attribute, represented as a string. *)
@@ -390,21 +450,20 @@ let countNgrams mdl =
 
 (***********************************************************)
 
-type abnormal =
-  | UnknownModelField of Http.field
-  | BadLength    of float*float
-  | BadFrequency of token*float*float*float
-
 let printReason conf out abn =
   match abn with
   | UnknownModelField fld ->
      Printf.fprintf out "Unknown Model Field: %a" printField fld
-  | BadLength (d,sdv) ->
-     Printf.fprintf out "Bad Length: %f , %f" d sdv
-  | BadFrequency (str,d,m,sdv) ->
+  | BadLength (d,sdv,min,max) ->
+     Printf.fprintf out "Bad Length: %f , %f, %f, %f" d sdv min max
+  | BadFrequency (str,d,m,sdv,min,max) ->
      if   conf.header.verbose
-     then Printf.fprintf out "Bad Frequency %s: d=%f , m=%f, s=%f" (stringOfCategory str) d m sdv
+     then Printf.fprintf out "Bad Frequency %s: d=%f , m=%f, s=%f, min=%f max=%f" (stringOfCategory str) d m sdv min max
      else Printf.fprintf out "%s " (stringOfCategory str)
+  | BadScore (fld,d,m,sdv,min,max) ->
+     if   conf.header.verbose
+     then Printf.fprintf out "Bad Score %s: sc=%f , m=%f, s=%f, min=%f max=%f" (fieldName fld) d m sdv min max
+     else Printf.fprintf out "%s " (fieldName fld)
 
 (*
 let outlierFrequency dlen2 r1 r2 =
@@ -422,7 +481,7 @@ let outlierFrequency r1 r2 = outlier r1 r2
   in  not (expectedOccMin <= actualOcc && actualOcc <= expectedOccMax)
 					    *)
 
-let frequencyDistance confld fldmdl1 fldmdl2 gmdl = 
+let frequencyDistance confld fldmdl1 fldmdl2 _ = 
   FieldModel.fold
     (fun l1 l2 -> List.concat[l1;l2])
     (fun ngrm r2 l ->
@@ -434,10 +493,17 @@ let frequencyDistance confld fldmdl1 fldmdl2 gmdl =
 		  with Not_found -> Distrib.singleton 0.0)
      in  if (outlierFrequency r1 r2) then
 	   begin
-	     (BadFrequency (ngrm,(meanDistance r1 r2),r1.mean,Distrib.stdDev r1))::l
+	     (BadFrequency (ngrm,(meanDistance r1 r2),r1.mean,Distrib.stdDev r1,r1.minval,r1.maxval))::l
 	   end
 	     else l)
     fldmdl2 []
+
+let ngramDistance confld fld fldmdl1 fldmdl2 gmdl = 
+  match confld.countmthd with
+  | Rank        prior -> Rank.distance        prior fld fldmdl1 fldmdl2 gmdl
+  | Alphabet    prior -> Alphabet.distance    prior fld fldmdl1 fldmdl2 gmdl
+  | Mahalanobis prior -> Mahalanobis.distance prior fld fldmdl1 fldmdl2 gmdl
+  | _                 -> frequencyDistance confld     fldmdl1 fldmdl2 gmdl 
     
 exception UnknownTestField of Http.field
 exception UnknownNgram of t
@@ -446,8 +512,8 @@ let fieldDistance mdl confld fld fldatt gmdl =
     let {length=dlen1;occurrences=fldmdl1} = Hashtbl.find mdl fld in
     let fldmdl2 = fldatt.occurrences in
     let dlen2   = fldatt.length in
-    let lendist = if outlier dlen1 dlen2 then [BadLength ((meanDistance dlen1 dlen2),Distrib.stdDev dlen1)] else [] in
-    let ngramdist = frequencyDistance confld fldmdl1 fldmdl2 gmdl
+    let lendist = if outlier dlen1 dlen2 then [BadLength ((meanDistance dlen1 dlen2),Distrib.stdDev dlen1, dlen1.minval, dlen1.maxval)] else [] in
+    let ngramdist = ngramDistance confld fld fldmdl1 fldmdl2 gmdl
     in List.concat [lendist;ngramdist]
   with Not_found -> [UnknownModelField fld]
 		      
@@ -459,7 +525,7 @@ let distance conf mdl test gmdl =
     (Hashtbl.fold
        (fun fld fldatt l ->
 	let confld = Config.get conf fld in
-	if confld.tokenization = Config.Exclude then l else (fld,fieldDistance mdl test confld fld attfld gmdl)::l) test [])
+	if confld.tokenization = Config.Exclude then l else (fld,fieldDistance mdl confld fld fldatt gmdl)::l) test [])
 
 let getInstances testfile =
   match testfile.data with
@@ -470,12 +536,13 @@ let getInstances testfile =
 let fatalCriteria abn =
   match abn with
   | UnknownModelField _ -> true
-  | BadFrequency (ngrm,d,m,dev) -> d<>0.0 && m = 0.0 (* Una ocurrencia de un ngram no visto en el entrenamiento *)
-  | BadLength (_,dev) -> dev = 0.0 (* Diferencias en un largo que es constante *)
-				 
+  | BadFrequency (ngrm,d,m,dev,min,max) -> d<>0.0 && m = 0.0 (* Una ocurrencia de un ngram no visto en el entrenamiento *)
+  | BadLength (_,dev,min,max) -> dev = 0.0 (* Diferencias en un largo que es constante *)
+  | BadScore (_,_,_,_,_,_) -> true
+     
 let countCriteria confhd abn =
   match abn with
-  | BadFrequency (ngrm,d,m,dev) ->
+  | BadFrequency (ngrm,d,m,dev,min,max) ->
        (match ngrm with
 	|String str ->
 	  (abs_float d) > confhd.minimumDistance.((String.length str)-1) &&
@@ -505,8 +572,6 @@ let printReasonList conf out str lscore =
       List.iter (fun r -> Printf.fprintf out "%a, " (printReason conf) r) lscore;
     end
 
-
-      
 let nbOutliers = ref 0
 let printTestFileDistances conf abs mdl ltestinst gmdl out =
   let outlierInstance = ref false in
@@ -548,20 +613,20 @@ let printTestFileDistances conf abs mdl ltestinst gmdl out =
 	instl
     end in
   let printList print l =
-    	List.iteri
-	  (fun i inst -> 
-	   begin
-	     Printf.fprintf out "Instance %2d :: " i;
-	     let testmdl = instanceExtraction conf.fields inst (emptyTestModel ())
-	     in print i (distance conf.fields mdl (buildModel conf.fields true testmdl) );
-	     Printf.fprintf out "\n";
-	     if !outlierInstance then begin nbOutliers := !nbOutliers+1; outlierInstance:=false end;		 
-	   end)
-	  l
+    List.iteri
+      (fun i inst -> 
+       begin
+	 Printf.fprintf out "Instance %2d :: " i;
+	 let testmdl = instanceExtraction conf.fields inst (emptyTestModel ())
+	 in print i (distance conf.fields mdl (buildModel conf.fields true testmdl) gmdl);
+	    Printf.fprintf out "\n";
+	    if !outlierInstance then begin nbOutliers := !nbOutliers+1; outlierInstance:=false end;		 
+       end)
+      l
   in  if conf.header.inversion
       then printList printTestFileDistanceListInverted ltestinst
       else printList printTestFileDistanceListNormal   ltestinst
-
+			    
 
 let printHistograms out mdl =
   begin

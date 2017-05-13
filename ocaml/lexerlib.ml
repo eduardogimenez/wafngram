@@ -13,12 +13,12 @@ let nextLine lexbuf =
 let nextLines n lexbuf = for i = 1 to n do new_line lexbuf done
 
 let trace str lexbuf= ()
-			(*
+(*			
   begin
     Printf.fprintf stdout "Match %s: %s\n" str (Lexing.lexeme lexbuf);
     flush stdout
   end
-			 *)
+ *)			 
 exception SyntaxError of string
 
 let printPosition outx lexbuf =
@@ -35,12 +35,14 @@ let parserWithError parser lexbuf =
        exit (-1)
      end
 
-   | _ ->
+(*
+  | _ ->
      begin
        fprintf stderr "%a: syntax error when reaching this token: %s\n"
 	       printPosition lexbuf (Lexing.lexeme lexbuf);
        exit (-1)
      end      
+ *)
 
 let parseInputFile parser filename =
   let lexbuf  = Lexing.from_channel (open_in filename) in
