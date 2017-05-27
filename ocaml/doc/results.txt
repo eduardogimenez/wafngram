@@ -1,0 +1,44 @@
+ Mahalanobis (common)
+ Ngramlength=2
+ MinimumNgramMean = 0.010000,0.009000,0.003000
+ MinimumUrlMean = 0.010000
+ MinimumDistance = 0.100000,0.100000,0.100000
+
+ Verbose=true
+ idOnly = false
+ Inversion=false
+
+Outliers ratio: N=2, 0.001056||   N=1,               N=2, 0.006056  || N=3, 0.035222
+Outliers ratio: N=2, 0.917175||   N=1,  0.968123 ||  N=2, 0         || N=3, 0.993377
+
+=====================================
+
+Rank
+Configuration parameters:
+ Ngramlength=2
+ MinimumNgramMean = 0.010000,0.009000,0.003000
+ MinimumUrlMean = 0.010000
+ MinimumDistance = 0.100000,0.100000,0.100000
+
+ Verbose=true
+ idOnly = false
+ Inversion=true
+
+Outliers ratio: 0.015278
+Outliers ratio: 0.98404
+
+=====================================
+
+FrequencyInField
+ Ngramlength=2
+ MinimumNgramMean = 0.010000,0.009000,0.003000
+ MinimumUrlMean = 0.010000
+ MinimumDistance = 0.100000,0.100000,0.100000
+
+ Verbose=true
+ idOnly = false
+ Inversion=true
+ 
+Outliers ratio: 0.005278
+Outliers ratio: 0.980930
+
