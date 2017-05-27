@@ -1,6 +1,7 @@
 \documentclass[runningheads,a4paper]{llncs}
 
 \usepackage[american]{babel}
+\usepackage[american]{amsmath}
 
 %better font, similar to the default springer font
 %cfr-lm is preferred over lmodern. Reasoning at http://tex.stackexchange.com/a/247543/9075
@@ -188,128 +189,140 @@ A usual use case in e-governement web applications is to ask the user to fill a 
 
 In its most general version, code injection consists in the malicious provision of unexpected input data which modifies the intended purpose of an executable, interpreted piece of code. Beyond SQL, this technique may be applied to many query languages that are usually used in web applications, such as XLDAP, OS commands, XPath, XML parsers, SMTP headers, NoSQL, among others. It may be applied no only to human supplied form fields, but also to other fields in the HTTP requests that usually are automatically filled by the web navigator, and which are used on the web server side to perform queries about supported features, better rendering, etc. 
 
-From a language perspective, code injections attacks arrive when the attacker intendedly mixes two languages: the expected language for a given field and a piece of query language. Our proposal is that such kind of attacks may be considered as a particular case of detecting multiple languages in a given piece text. In the former example, the expected language for the field correspond to personal names in one language, while the query programming language is SQL. Our research program is therefore to find conexions between NLP techniques and attack detection in WAF, through the application of pattern recognition techniques.
+\section{A language perspective}
 
+From a language perspective, code injection attacks always involve mixing two languages: the expected language for a given field and a piece of a query programming language. In the former example, the expected language for the field correspond to personal names in natrual language, while the query programming language is SQL. Starting from this fact, we propose that detecting such kind of attacks may be considered as a particular case of detecting multiple languages in a given piece text. Our research program is therefore to find conexions between NLP techniques and attack detection in WAF, through the application of pattern recognition techniques.
 
-\section{Objectives}
+A well known technique for identifying language of a piece of text is to measure the occurrence frequency of the n-grams occurring in the text. An n-gram is a sequence of n consecutive symbols of the alphabet used in the text (for example, UTF8 symbols). For instance, the most frequent trigrams in Spanish are \textit{DEL} and \textit{QUE}. On the other hand, the trigrams \textit{WHE} and \textit{OP+} are very rare in Spanish, but not in an SQL sentence, as they apear in the keywords DROP and WHERE. 
 
+We discarded the approach of analysing word ocurrences insted of n-gram ones, because this requires a tokenization pre-processing of the text, which can be much more complicated. Tokenization is the process of spliting the text into tokens (sequences of consecutive symbols) between two delimiters, which are then discarded from the analysis. In natural language, there are very few delimiters (namely, blanks, dots, commas) and they are not relevant for identifying the language. This is not the case of programming languages, where the number of nested parentheses, semicolons or other delimiters is usually higher than in natural language and relevant for the analysis. Moreover, the discarding the semicolon delimiters in a sequence like \texttt{‘;DROP+TABLE+users;SELECT+userinfo+WHERE+‘t’=‘t} results in a loss of information, as the opening sequence \texttt{';} is a common pattern in SQL injection attacks. Furthermore, the tokenization process depends on the lexical conventions of each programming language, as the delimiters vary from one programming language to the other. An alternative could be to consider as potential delimiters the union of the delimiters of all the programming languages to consider. However, some symbols that are delimiters in one programming language may be part of programming constructions in other languages, so suppressing them may destroy relevant sequences for the analysis. On the other hand, a text can be split in n-grams following a very simple, fast and linear algorithm, in which a windows of length \textit{n} is shifted all along the text, and the process is the same independently from the programming languages to be considered.
 
-Being more specific, our objective is to extend ModSecurity with anomaly detection features based on probabilistic and statistical models which satisfy the following properties:
-\begin{enumerate}
-\item Increases the effectiveness rate with respect to the CRS, that is, detects more attack scenarios than just using the CRS rules alone. As a first experiment, we only focus on those attacks which exploit the use of user-supplied input without proper validation, such as SQL injection, cross-site scripting, remote file inclusion, etc. 
-\item Decreases the WAF deployment time, minimizing the amount of false positive and therefore of exceptions rules to be added.
-\end{enumerate}
-The idea is to reuse ModSecurity’s core functionalities (packet interception, inspection and processing) but introducing an additional pluggable module for adding anomaly detection and machine learning features.
+In spite of the enumerated advantages, there is at least one case in which there exist a clear delimiter that justifies adopting a word tokenization approach rahter than n-grams: the URI field of the HTTP requests is a sequence of character strings separated by the slash symbol (\texttt{/}). For this case paticular case we adopt the usual tokenization approach, splitting the whole string into the sub-strings delimited by the slashes. Once this is done, the approach will be the same as for n-grams, just taking each sub-string as a single symbol. For example, the URI \texttt{http://www.example.com/store/members} after tokenization is the list $["\texttt{http:}", "\texttt{}", "\texttt{www.example.com}", "\texttt{store}", "\texttt{members}"]$, and a bigram of this sequences is $[\texttt{store},\texttt{members}]$.
 
-\section{Bayesian Models}
+Another requirement to be fulfilled is to be able to provide \textit{evidence} of the anomaly when an HTTP request is rejected. When using n-grams as attributes this can be easily related to some pieces of the input data that are considered outliers.
 
-From a theoretical point of view, probabilistic methods are used in order to aproximate a computing function $f : X_1 \times X_2  \times \ldots X_n \rightarrow Y$ from a set of training values $D \subseteq X_1 \times X_2  \times \ldots X_n \times Y$  which partially describe the function as a relation. Those methods provide a computable function that, given a tuple $(a_1,\ldots a_n ) \in  X_1  \times X_2  \times … X_n$, calculates a probability distribution $P(y=f(a_1,….a_n )  ┤|  x_1=a_1,….x_n=a_n)$ over a random variable $y\in Y$ conditioned on the random variables $x_1\in X_1,… x_n\in X_n$. The function $f$ is therefore approximated by the value in $Y$ with the highest probability in the distribution.
+\section{N-gram model framework}
 
-In order to achieve our objective, the first question to be answered is therefore what the function f to be approximated is. This amounts to establish what are the random variables to be considered in our model. 
+We developed and compare three different models based on n-gram frequencies. All the three models are different instances of the same pattern. We start from a set $Tr$ of training HTTP requests, that we assume are legit requests. Let us call $F=N_H \times P$ the set of \textit{model fields} formed by an HTTP request field name in $N_H$ and either a parameter name in $P$ (if the field contains parameters, as may be the case in the \texttt{URI} or \texttt{Body} fields), or a special value $\bot$, otherwise. The collection of attributes $A$ of the model is the set of n-grams contained in the contents of each model field in the training set $Tr=\{r_1,\ldots r_{\mid Tr \mid}\}$. In other words, we do not consider the raugh n-grams in the HTTP request fields, but we parse the command structure, and consider each form field in the web application as an independent language to be modeled. The variable $n$ is consider a parameter of the model that can be adjusted. In practice, we only consider $n=1,2,3$. Beyond 3, the frequency of any n-gram become very rare, and threfore meaningless for identifying the language.
 
+We associate a random variable $X_a$ to each attribute $a=(x,z) \in A$, which measures events related to the ocurrences of the n-gram $z$ in the model field $x$. We focus on two types of events: the number of ocurrences of the n-gram in the model field (integer value) or its frequency (that is, the number of ocurrences of the n-gram divided into the total amount of n-grams of this model field). Measuring the number of n-grams is better suited for those model fields having an enumerated type of possible values. Mesuring the n-gram frequency performs better when the field length may significantly vary from one requesto to another. For example, a message field in a contact form of the web application may be arbitrarly long, so the number of ocurrences of a given symbol may be quite different depending on the message. However, the frequency of that symbol will be rather stable.
 
-\section{The HTTP Protocol}
+%We consider four possible types of random variables, resulting from the combination of the following criteria:
+%\begin{itemize}
+%\item Whether the random variable measures 
+%\item Whether each HTTP requests gives raise to an independent sample of the random variable, or the whole training set $Tr$ is considered as a single sample. In the first case, the value of $X_a$ for the whole set results from the average for each HTTP request sample, while in the second this value is computed exactly from all the samples.
+%\end{itemize}
 
-A web application is essentially a reactive system compliant with the HTTP protocol. HTTP is a simple communication protocol independent of the communication media and based on a client/server arquitecture. The client sends HTTP commands to the server, and the server reacts to them one by one by sending a command response to the client. HTTP is a connectionless protocol: the browser initiates a conection to the server for each command, then disconnects and waits for an answer. The server reconnects to the client each time in order to send the response back. HTTP is also a stateless protocol: each HTTP command is processed and answered independently from how the previously received commands were processed.
+A distribution for these variables is a tuple $d=(\mu, \sigma, max, min, N_d)$, where $\mu \in R$ is the distribution mean, $\sigma^2 \in R$ the distribution variance, $max$ and $min$ the maximum and minimum values that were sampled for $X$, and $N_d$ the number of sampled values. We consider two functions $singl : R \rightarrow D$ which constructs a distribution $(r,0,r,r,1)$ from a single real value $r$ and a function $sample: D \rightarrow R \rightarrow D$ which adjusts the parameters of a previous aproximation to a given distribution $d$ with a new sampled value $r$. A map $M : A \rightarrow D$ describes the expected distributions for the random variables $X_a$ of attribute $a$. This mapping provides the signature of the language associated to each model field $x$, and is inductively constructed from the training set $Tr$, iterating the $sample$ function from the initial application of the $singleton$ one.
 
-HTTP messages are encoded as text strings. On the client side, the HTTP client sends a request to the server specifying a request method (i.e., the type of operation to be perfomed), URI, and protocol version, followed by a MIME-like message containing request modifiers, client information, and possible body content. 
+The arriving HTTP request shall be analized on-line, one by one. In order to test an HTTP request $r$, the map $M_r$ is first constructed for the training singleton \{r\}. Then, a score $s=d_x(M,M_r)$ is computed for each model field $x$ in the HTTP request using a distance function $d$ which compares the distance between the expected distributions of n-grams provided by the model $M$ and the actual distributions $M_r$ extracted from $r$. If the distance satisfies some given criterion $C$, the request is considered acceptable, otherwise it is considered an outlier. By default, this criterion is being outside the rank defined byt he minimum and maximum values of the n-gram distribution, that is,  $C(s,s_r) = s.min \leq s_r.\mu \leq s.max$
 
-The possible request methods enable to perform read/update/delete operations on the server’s contents, as well as and some control operations for handling communications:
-	GET: Retrieve information from the given server using a given URI. 
-	HEAD: Same as GET, but transfer the status line and the header section only.
-	POST: Send data to the server using HTML forms.
-	PUT: Replace the target resource with the uploaded content.
-	DELETE: Remove the contents at the given by URI.
-	CONNECT: Establishe a tunnel to the server identified by a given URI.
-	OPTIONS: Describe the communication options for the target resource.
-	TRACE: Perform a message loop back test along with the path to the target resource.
+This procedure is repeated for each model field $x$. If the contents of any of the model fields in the HTTP request $r$ is evaluated as an outlier, the whole HTTP request is processed as dangerous (fileterd, logged, derived to a honeypot application, depending on the web application security policy). The evidence for the anomaly of $r$ in field $x$ is provided by the set of n-grams $\{ z \mid  |M_x(z).\mu - M_{r,x}(z).\mu | > p^n_x \land M_x(z).\mu > m^n_x\}$ for some ceil distances $p^n_x$ and n-gram frequencies $m^n_x$ depending on the n-gram length $n$ and the model field $x$ (all of them taken as zero, by default). This is what enables the security analyst to understand why the WAF rejected the request. It is also what enables a fine tuning of the model.
 
-The server contents which are read, updated or deleted are organized into locations arranged in a tree structure, each one specified by a Universe Ressource Identifier (URI).
+\subsection{Model Tuning}
 
-The HTTP server responds to a received request with a success or error code, followed by a MIME-like message containing server information, entity meta-information, and possible entity-body content.
+In practice, the training set $Tr$ will be a small fragment of all possible HTTP requests, so it may happen that a given attribute $a$ found in the test request $r$ is not present in any of the request of the training field $Tr$, but still a valid input. However, most of the fields contains values that are a subset of some larger language. For instance, a form field in the web application corresponding to an address in Montevideo is a particular case for a piece of text written in Spanish. Such larger language has its own language signature, which can be used as a prior. In the case a given n-gram is not be defined in $M$ for that field, we use that prior as the expected value for the model. We take as priors distributions the ones proposed in \cite{priors}. Several sites offer countings or the mean for n-grams made of letters extracted from large Spanish corpuses such as Wikipedia articles. Unfortunatelly, we do not found any of them considering n-grams containing blank spaces and punctuation symbols, nor proposing n-gram variances from one Spanish document to another. The variance of those n-grams in the prior is considered as being zero.
 
-The HTTP protocol does not impose any structure on a request body. However, as was said in section 1.1, in the kind of web applications we are interested in, most of the interaction with the user consists in presenting HTML forms to be filled and answers to the filled forms. Once filled, HTML forms are transmitted to the server as either GET or POST requests including a form data set. Such data set is a list of pairs (field=value) included in the request body. The “=” symbol is used to separate both components of the pair, even though this is not part of the standard.
+The contents of some parameters of the web application may be random data by its very nature. This is the case, for instance, of a peremeter containing the user's password: a password should be in principle any sequence of symbols, and all sequences should be equally likely. Furthermore, for security reasons, it would not be a good idea that the WAF stores information about the distribution of such sensible fields. In those cases, we simply ignore the parameter field in the model. The consequence of this choice is that we will not be able to detect attacks performed on those fields. A negative classification approach should be adopted for such fields, searching for those n-grams that are likely to appear in an attack, rather than positively characterising normal values. 
 
-\section{Attacks considered}
-
-[The problem is about mixing programming language constructions into other languages, usually texto or numbers]. 
-[Give an example of each attack]
-[Ww consider attacks in one step]
-[Could be seen as a problem of programming language recognition]
-
-\section{The CISC2010 dataset}
-
-[It is annonymized, consecuences]
-
-\section{The model}
-
-A first refinement of our problem is to consider the function $f∶X_1  \times X_2  \times\ldots X_n \rightarrow Y$ to be approximated as a classification function that tags each HTTP request received as either normal traffic or as part of an ongoing attack. From this point of view, an input random variable xi of the model presented in section 1.3 can be associated to a field of an HTTP request. The arrival of an HTTP request is therefore one sampling of such random variables. 
-On the other hand, the domain Y of the function to be approximated is a finite domain with one value for normal traffic plus a list of values corresponding to a class of possible attacks. 
-
-Actually, the model could be refined by considering the request body as a list of $2m$ random variables, each one associated with one of the components of the (field=value) pairs in the request body. Despite being more accurate, this model seems harder to handle in practice. As different URLs have different associated forms, and therefore different set of random variables. Then, in such a model we do not have a single function to approximate, but a family of functions $f_{url}$ of different arities indexed on the URL. Furthermore, the collection of functions to approach would be dependent of each application, and so would be the model. 
-
-A simpler approach is to consider each HTTP request field as a piece of text to be processed using document classification techniques. Such a model would be similar to the models used to develop spamming filters: the request field is seen as a bug of words, and a probability is assigned to each word in a dictionary, measuring the likelihood for the request to be an attack (of a give class) depending on the number of ocurrences of this word in the request body. For instance, in SQL injection attacks, the attacker includes (part of) an SQL sentence in one of the body fields of the HTTP request. Therefore, the occurrence of an SQL keyword such as SELECT or WHERE increments the likelyhood for the request to be an attack. Actually, recognizing an injection attack amounts to recognizing that the HTTP contains a piece of programming language, and classifying which programming language is it from set of given ones (LDAP, SQL, Unix commands, Windows commands, etc.).
-
-\subsection{Attribute extraction: tokenization}
-
-The process of splitting each dataset document into words and counting the ocurrences of each word in it is usually called \textit{tokenization}. Tokenization is therefore the process of attribute extraction in our model. In natuaral language documents, words are separated by special symbols used as delimiters: blank spaces, commas, dots, etc. The dictionnary to be used is therefore determined by splitting the the sequence of characters into those sub-sequences of symbols (``words'') that strictly lay inside the boundaries of two consecutive delimiters (that is, delimiters excluded). In Weka, this functionality is provided by the \texttt{StringToWordVector} pre-processing function. However, for several reasons this tokenization approach does not fit well for processing HTTP requests. The relevant words to be spotted may be preceeded or followed for a large collection of characters. The keywords of the programming language which is contaminating the request (SQL, LDAP queries, OS commands, etc.) can be sourrended for may symbols: semicolons, commas, paretheses, white spaces, control returs, tabs, vertical bars, beginning of comments, etc. As a consequence, this tokenization process induces very large dictionnaries (about 80.000 for the CISC2010 dataset), and therefore too many random variables. This amount of random variables poses several efficiency problems for the learning process, the main being that exceeds the heap ressources available in Weka.
-
-A second issue with this kind of tokenization approach is the fact that the numbero of relevant words for spotting an attack may actually be infinite. For instance, the suffix \textit{(myparam=5)} inside an HTTP field is a relevant sequence for detecting an LDAP injection attack, but so does any other sequence obtained replacing \texit{myparam} for any other parameter and \textit{5} for another value. Moreover, this sequent may be relevant for a given web application which uses \textit{myparam}, but is not for a web application which uses a different parameter identifier. In addition to this, such sequences can be juxtaposed to other similar ones with no delimiter separating them, like in \textit{(myparam1=5)(myparam2=bla)}. 
-
-\todo{poner ejemplo real, con passwords, etc sacado de literatura}
-
-These reasons lead us to the conviction that in the context of classifying programming languages, the notion of word should be abstracted to the more general concept of a \textit{lexical token}, that is, a string satisfying a regular expression, its \texti{lexical class}. From this point of view, tokenization is nothing but a lexical analysis of the HTTP request, in the sense that compiler theory gives to this term. The notion of word and dictionnary is therefore replaced by a collection of patterns, each one described by a regular expression, and describing a potentially infinite set of strings. 
-
-\subsection{Attribute selection}
-
-The next step in the design of the model is therefore to determine which are the relevant patterns identifying a piece of programming language inside the HTTP request. Those patterns should satisy at least the following criteria: 
+In practice, not all n-grams are relevant. Actually, some distinctions are more problematic than helpfull. For example, does the IP address 168.192.0.1 better characterise valid requests than the IP 168.192.0.2? Certainly not, and on the other side, counting the number of ocurrences of each particular IP address is more prone to overfitting. For this reason, we do not directly work on the n-grams themselves, but on an abstraction resulting from the following transformations: 
 \begin{itemize}
-\item It should be a construction related to an attack. For instance, the keyword WHERE in SQL appears in many attacks, but the keyword XXX is hardly related to an attack.
-\item It should be long enough to have a low probability of ocurring in a different context, in particular in a valid HTTP request. For instance, the Unix command \texttt{cat} is frecuently used in many OS command injection, but it also occurs in many English words and therefore may apear in legal values as well.
-\item It should not be very long. The longest the sequence, more likely is for the attacker to find a slightly different construction which does the same but does not match the pattern.
+\item Letters are uncapitalized
+\item Accents are removed (for instance, the letter \textit{á} is transformed into \textit{a}
+\item N-grams made only of numbers are collapsed into the capital letter \textit{N}
 \end{itemize}
 
-A pre-processing tool was developed in Ocaml to perform the lexical analysis pre-processing of the dataset. This tool parses an ARFF file (the format for storing Weka datasetst), identifies the strings matching a collection of lexical tokens according to those criteria, and replace them by a representative string for each lexial class, its \textit{lexical class name}. Each lexical class name is surrounded by the special character ``¡'', which does not appear in the whole dataset. This character is then specified to Weka's tokenization process as the single delimiter to be used when separating documents in words. This preprocessing step drastically collapses the number of random variables of the model, as each lexical class name represents thousands of lexical tokens in the dataset. 
+\section{Experimental results for three n-gram models}
 
-In order to identify relevant lexical tokens we first studied the public knowledge about the web application attack classes in the dataset from the litterature from \cite{OWASP}. Then, we inspected the HTTP requests  in the dataset, looking for regular expressions characterising the injected languages and satisfyng the abovementioned criteria. Starting from a first kernel built by hand (for example, from the programming language keywords), we then tuned each regular expression using two different techniques, until an acceptable accuracy rate is reached. For the tunning process, we split the dataset in a collection of sub-sets, each one formed by the valid HTTP requests and the requests for a given class of attacks. This is possible because the syntax of the programming languages used in the injection attacks are quite different. Once the subsets sufficiently tunned, we re-assemble the whole and looked for interferences or unexpected classifications between attacks. An example of interference is the lexical class of file paths, which is used both in Xpath expressions and in OS commands.
+Providing a particular set of random variables $X_a$ for the attributes, a particular distance $d$ between language signatures and particular outlierness criteria $C$ and evidence criteria $E$, we obtain an particular for tackling the code injection problem using n-grams. In the rest of this section, we describe the results with three models obtained from this general pattern for the CISC2010 dataset available at \cite{CISC2010}. This dataset provides a collection of normal and abnormal HTTP requests for a tiny web application for an on-line store. The application enables the user to fill a shopping car and then pay. The dataset is made of 36.000 valid request for the training set, another 36.000 different valid requests for testing normal behavior (NTR), and 25.000 abnormal test requests (ATR), mixing different kinds of attacks and valid requests with infrequent characters in the parameter fields (typos). Unfortunatelly, attacks and valid but infrequent requests are not distinguished in the ATR. 
 
-Different methodologies were used for tuning the set of lexical classes. The kernel usually consisted in the keywords or basic lexical constructions of each query language. If the lexical analysis yield too many lexical tokens ocurring in valid HTTP requests, then more context was added to the lexical tokens corresponding to prefixes or suffixes. For example, the Unix command \texttt{cat}, which occurs in many OS commanding attacks, is a string that is also very likely to occur in other contexts. However, in OS commanding attacks, this string is usually preceeded by a semicolon ending a previous command, a vertical bar \texttt{|} assembling a Unix filter, a white space, or the file path \texttt{/usr/local/bin/}. Extending the lexical token to include such prefixes, the probability of capturing this lexical token in the context of, namely, English text, is much lower. However, describing the constructions of the query language with too much detail usually leads to the opposite case, namely, several lexical tokens are not identifyined during the pre-processing, and therefore not counted in the model. This is the case, for instance, of Xpath expressions containing an Xpath predicate, such as \texttt{/clients/xxx[blabla]}. There are too many possible expressions for the predicate in between the square brackts, trying to capture them with a regular expression is hard and usually leaves some of them outside. It is preferable to just consider that as free text, without checking its structure. A different tunning process was to run the tokenization process and use a InfoGain function to rank the information provided by the obtained attributes (words). For instance, the set of OS commands to be included in the OS Commanding class was enlarged using this method, as the name of the command appears in the pieces of text highly ranked by this function. Amazingly, this process was not the most fruitfull one for determining relevant lexical tokens. This process eventually lead us to a small number of classes, xx in total. The resulting lexical classes are presented in appendix XXXX.
+The model performance on the data set is measured using the usual indicators for detection rate and false alarm rate. The detection rate corresponds to the porcentage of the ATR file that is detected training the model with the whole $Tr$ set. The false alarm rate corresponds to the percentage of the NTR file that is pointed as abnormal.
 
-A different way of minimizing false positives consist in tuning the HTTP fields that will be processed. Indeed, not any HTTP field can be exploited by the attacker to inject a query. The contents of many of them follow a highly structured pattern, which can be checked using an algorithm instead of using machine learning techniques. For instance, the XXX field shall contain an IP address and nothing else, and this can be positevely checked by the WAF. Furthermore, some of the fileds are not involved in the construction of any kind of query on the web application side, so it does not worth to inspect them for query language injections. Moreover, in the \textit{Query} and \textit{body} fields, the attacks only concern the values inside the assigned parameters of the request, that is, the right hand side of the \textit{ident}=\textit{value} pairs of whith these fields are made of, not the query parameter names themselves. Hence, it make sense not to consider those parameter names during the tokenization process.
+\subsection{Mahalanobis distance}
 
-The model used is a purely negative model: it only counts lexical classes that pin up possible attacks, regardless of the rest of the text appearing in the HTTP request. After the tokenization process, all the pieces of text sourrended the spotted lexical classes were discarded. Several reasons uphold this approach. First, to provide a model with as few words as possible speeds up the learning process and avoids Weka running out of memory. Second, most of the remaining material was either useless for identifying attacks or increase the possibility for introducing overfitting in the model. As an example, consider the cookies or other encrypted material that is random in nature and uniquely associated to a collection of HTTP requests forming an HTTP session. The learning process could associate that when an HTTP request in the dataset has a given cookie, it corresponds to a session initiated by the attacker, and therefore it is likely to contain an attack. However, this information is hardly reusable for classifying future HTTP requests, as the identified cookie is not likely to be assigned again. Finally, as was mentioned before, the dataset was anonymized through a masking process which replaces the information inside valid HTTP requests by random data. This destructs any regularity in the valid HTTP requests that could be learned in order to recognize them. Using true, non anonymized web application data, it could worth to push further the lexical analysis, recognizing  other lexical classes such as names, numbers, personal identification numbers, and other types. In the more general case, one could think of the classification problem as a problem of learning the correct datatype (alphabet) of each field and query parameter in valid HTTP requests.
+In this model, the random variable $X_a \in R$ associated to the attribute $a=(x,z)$ measures the frequency of n-gram $z$ in the contents of te model field $x$, that is, the number of occurrences of $z$ in the contents of $x$ divided into the total number of n-grams in $x$. The frequency in the model is estimated as the average of the frequencies for each request $r_i \in Tr$.
 
-[Ojo: el modelo cuenta las ocurrencias en toda la HTTP request, todos los fields, no solo aquellos que nos interesan. Esto es porque el formato de weka de pares no permite separarlos por field]
+The distance between two language signatures for field $x$ the is mesured applying Mahalanobis distance, as described in \ref{MahalanobisDistance}. Let $N = \{ z \mid a=(x,z) \in F  \}$, Mahalanobis distance is defined as follows:
 
-[buscar literatura sobre reconocimiento de lenguajes de programación, as far as we know there is no much]
+\begin{align*}
+\label{MahalanobisDistance}
+d_x(M,M_r) & = \sum_{z\in N} \frac{ | M_x(a).\mu - M_{r,x}(a).\mu |}{1+M_{r,x}(a).\sigma}\\
+            & = \infty, \text{if} M_x(a) \text{is undefined} 
+\end{align*}
 
-[
-Open questions:
-	From a different perspective, the problema can be modeled using statistical language models and n-gram models introduced by Shannon. The problem to be solved is, having seen a piece of text in the field, which is the probability for the next word to be a ‘ or “ or SELECT or other suspicious words that could point to an SQL injection or other forms of attacks.
-	Can the problem be modeled as Grammar induction?
-	Should we considered isolated HTTP requests or rather the whole session?
-	]
+The mapping $M(a)$ associates the parameters of the distribution that is the language signature for $x$. Mahalanobis distance compare the means of each n-gram distribution, and relates them to the variance of such n-gram in the model. In this way, the differences in those n-grams with high variance does not pound as differences with respect to n-grams which are rather constant frequency. A constant $1$ is added to the denominator for preventing a division by zero for those n-grams that have a constant frequency. For determining whether an n-gram $z$ is an outlier we use max-min. If the attribute $a$ was never seen in the training set, then $M_x(a)$ is undefined, and there is no reference distribution for the attribute. If this is the case, a special score value $\infty$ greater than any other possible scrore is assigned to the attribute, causing the field contents to be considered as an outlier.   
 
-\section{Experimental results}
+Table \ref{MahalanobisModelResults} shows the value of the indicators for this model, taking n-grams of length $n=1,2,3$. The best compromise is obtained for $n=2$.
 
+\begin{table}[]
+\centering
+\caption{Mahalanobis model}
+\label{MahalanobisModelResults}
+\begin{tabular}{|l|l|l|l|}
+\hline
+                 & n = 1   & n = 2  & n = 3    \\
+\hline
+Detection Rate   &  0.965  & 0.984  & 0.992    \\
+\hline
+False Alarm Rate &  0.002  & 0.005  & 0.013    \\
+\hline
+\end{tabular}
+\end{table}
+
+Inspecting the evidence generated for the rejected requests, we notice that......
+
+\subsection{Ranking}
+
+This model is inspired from a usual method for detecting language mixures in the web \cite{XX}. The random variable $X_a \in R$ associated to the attribute $a=(x,z)$ measures the number of ocurrences of n-gram $z$ in the contents of model field $x$ along all the requests in the training set $Tr$. Then, the model is post-processed, and the n-grams ocurring in each field $x$ are arranged in decreasing order respect to the mean of its frequency.  The resulting ordered list of attributes $[a_a,\ldots a_n]$ is the language signature of model field $x$, and the model $M$ is the function $M_x(a_i)=\text{singleton}(i) \in D$ providing the position in that list. In order to compare the language signature for $x$ obtained from the test request $r$ to the expected language signature by adding the difference in the ranking position for each n-gram ocurring in $r$. 
+
+\begin{align*}
+\label{RankDistance}
+d_x(M,M_r) & = \sum_{z\in N} \lvert M_x(a).\mu - M_{r,x}(a).\mu\rvert \\
+           & = \infty, \text{if } M_x(a) \text{ is undefined} 
+\end{align*}
+
+Table \ref{RankModelResults} shows the value of the indicators for $n=1,2,3$.
 
 
 \begin{table}[]
 \centering
-\caption{Confusion Matrix}
-\label{ConfusionMatrix}
+\caption{Rank model}
+\label{RankModelResults}
 \begin{tabular}{lllllllll}
-                & SSI & OS Command & SQL Injection & Path Traversal & Valid & LDAP Injection & XXS & XPath Injection \\
-SSI             &     &            &               &                &       &                &     &                 \\
-OS Command      &     &            &               &                &       &                &     &                 \\
-SQL Injection   &     &            &               &                &       &                &     &                 \\
-Path Traversal  &     &            &               &                &       &                &     &                 \\
-Valid           &     &            &               &                &       &                &     &                 \\
-LDAP Injection  &     &            &               &                &       &                &     &                 \\
-XXS             &     &            &               &                &       &                &     &                 \\
-XPath Injection &     &            &               &                &       &                &     &                
+                 & n = 1   & n = 2   & n = 3   \\
+Detection Rate   & 0.969   &  0.990  & 0.992   \\
+False Alarm Rate & 0.001   &  0.016  & 0.033   \\
 \end{tabular}
 \end{table}
+
+\subsection{Mismatch count}
+
+In the third model considered the score consists in just counting the number of evidence elements, that is, how many n-grams are outliers with respecto to their expected distribution. 
+
+\begin{equation}
+\label{MismatchCountDistance}
+d_x(M,M_r) = \lvert \{ z \ mid \lvert M_x(z).\mu - M_{r,x}(z).\mu\rvert > p^n_x \& M_x(z).\mu > m^n_x\} \rvert 
+\end{equation}
+
+The model parameters $p^n_x$ and $m^n_x$ can be used to tune the model. Figure \ref{FrequenciesModelResults} shows the results when taking $p^1_x = 0.01$, $p^1_x = 0.05$ and $p^1_x = 0.1$ on one hand and $m^1_x=0.001$, $m^1_x=0.01$ and $m^1_x=0.003$ for all model field $x$.  
+
+\begin{table}[]
+\centering
+\caption{Independent Frequencies model}
+\label{FrequenciesModelResults}
+\begin{tabular}{lrrr}
+                 & n = 1   & n = 2   & n = 3   \\
+Detection Rate   & 0.966   &  0.985  &  0.992  \\ 
+False Alarm Rate & 0.001   &  0.004  &  0.012  \\ 
+\end{tabular}
+\end{table}
+
+\section{Related work}
+
+todo: el paper de cisc no considera ataques en campos de los http requests que puedan contener caracteres especiales. No va a las frecuencias de n-gramas más largos, solo de caracteres, y caracteres especiales permitidos. Encontrar un ataque en PKDD que contenga casos que no son cubiertos. 
+
+todo: mix of models. email, the best is rank. Explicar que si no ponemos infinity cuando no encontramos un ngram entonces las ocurrencias de simbolos que no están en el alfabeto pesan poco, se camuflan en las diferencias de frecuencia habituales.
+
 
 \section{Conclusions}
 
