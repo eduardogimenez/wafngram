@@ -210,6 +210,8 @@ let main () =
 		 else ()
 	       end)
 	  end
+	  (*; let file = (open_out "ngramnotfound.txt")
+	  in begin Hashtbl.iter (fun ngrm n -> Printf.fprintf file "%s %d\n" ngrm n) Ngram.Frequency.count;flush file end*)
 	end
      with
        CouldNotSplitField s   -> Printf.fprintf stderr "Error in instance %d: colud not split field %s\n" !Ngram.instNumbProcessing s

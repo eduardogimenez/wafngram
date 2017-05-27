@@ -119,17 +119,6 @@ let toList =
 (* Transforms the collected data into the field model to be used for testing. *) 
 let buildFieldModel countmthd fldmdl =
   match countmthd with
-(*
-  | GlobalCount ->
-     let len = float_of_int (Hashtbl.fold (fun ngrm d n -> d.num + n) fldmdl 0)
-     in Tries.map 
-	  (fun ngrm d ->
-	   {mean=d.mean/. len;
-	    minval=d.minval /. len;
-	    maxval = d.maxval /. len;
-	    sigmanum=d.sigmanum /. len;num=d.num})
-	  fldmdl
- *)
   | Rank prior    ->
      let l = toList fldmdl in
      let sortedl = 

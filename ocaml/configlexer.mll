@@ -26,6 +26,7 @@ rule read =
 | "HEADER"           {HEADER}
 | "FIELDS"           {FIELDS}
 | "NgramLength"      {NGRAMLENGTH}
+| "DefaultMethod"    {DEFAULTMETHOD}
 | "MinimumNgramMean" {MINIMUMNGRAMEAN}
 | "MinimumUrlMean"   {MINIMUMURLMEAN}
 | "MinimumDistance"  {MINIMUMDISTANCE}
@@ -47,6 +48,7 @@ rule read =
 | "Catalonian"       {CATALONIAN}
 | "English"          {ENGLISH}
 | "Rank"             {RANK}
+| "Mahalanobis"      {MAHALANOBIS}
 | "Delimiter"        {DELIMITER}
 | "Exclude"          {EXCLUDE}
 | bool               {BOOL (bool_of_string   (Lexing.lexeme lexbuf)) }

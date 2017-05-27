@@ -6,7 +6,7 @@ open Lexerlib
 
 let blank = [' ']
 let newline  = ('\r' | '\n' | "\r\n")
-let ngram = ['a'-'z''ç'-'ñ''A'-'Z''Ç'-'Ñ''+']+
+let ngram = ['a'-'z''ç'-'ñ''A'-'Z''Ç'-'Ñ''+'',''.'':'';''('')']+
 let count = ['0'-'9']+
 
 rule read =

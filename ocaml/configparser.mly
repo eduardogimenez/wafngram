@@ -3,6 +3,7 @@
 %token FIELDS
 %token EQUALS
 %token HEADER
+%token DEFAULTMETHOD
 %token NGRAMLENGTH
 %token MINIMUMNGRAMEAN
 %token MINIMUMURLMEAN
@@ -22,6 +23,7 @@
 %token ENGLISH
 %token DELIMITER
 %token RANK
+%token MAHALANOBIS
 %token NUMBERINFIELD
 %token EXCLUDE
 %token PRIOR
@@ -47,31 +49,45 @@ file: HEADER hd=header FIELDS l=list(fieldConfig) EOF
     end}
 
 header:
+DEFAULTMETHOD EQUALS m=tkMethod
 NGRAMLENGTH EQUALS n=NUMBER
-MINIMUMNGRAMEAN EQUALS lr=list(REAL)
-MINIMUMURLMEAN EQUALS   r=REAL
-MINIMUMDISTANCE EQUALS  d=list(REAL)
+ar=minngrammean
+ad=mindist
 VERBOSE EQUALS b1=BOOL
 IDONLY  EQUALS b2=BOOL
 INVERSION EQUALS b3=BOOL
 list(prior)					      
-{{Config.ngramlength=begin Config.length := n;n end;
-  Config.minimumNgramMean=Array.of_list lr;
-  Config.minimumUrlMean=r;
-  Config.minimumDistance=Array.of_list d;
+{ Config.defaultMethod:=m;
+  Config.length := n;
+  Config.minimumNgramMean:=ar;
+  Config.minimumDistance:=ad;
+ {Config.ngramlength=n;
   Config.verbose=b1;
   Config.idOnly=b2;
   Config.inversion=b3}}
+
+mindist: MINIMUMDISTANCE EQUALS  d=list(REAL) {Array.of_list d}
+
+minngrammean: MINIMUMNGRAMEAN EQUALS lr=list(REAL) {Array.of_list lr}
 
 prior:
 PRIOR EQUALS file=QSTRING
 {LoadPrior.parser file}
   
-fieldConfig: FIELD fld=NUMBER subfld=option(FIELDNAME) tkn=option(tokenInfo) mthd=option(tokenizationMethod) sbf=option(subfields) END
- {{Http.position=fld;Http.subfield=subfld},
-  {Config.tokenization=(match tkn  with Some tk -> tk | None -> (Config.default()).Config.tokenization);
-   Config.countmthd   =(match mthd with Some m -> m   | None -> (Config.default()).Config.countmthd);
-   Config.subfields=sbf}}
+fieldConfig:
+FIELD
+fld=FIELDNAME
+subfld=option(FIELDNAME)
+tkn=option(tokenInfo)
+mthd=option(tokenizationMethod) sbf=option(subfields) minDis=option(mindist) minMean=option(minngrammean)
+END
+ {{Http.position=Http.FieldNames.index fld;Http.subfield=subfld},
+  {Config.Field.tokenization=(match tkn  with Some tk -> tk | None -> (Config.Field.default()).Config.Field.tokenization);
+   Config.Field.countmthd   =(match mthd with Some m -> m   | None -> (Config.Field.default()).Config.Field.countmthd);
+   Config.Field.subfields=sbf;
+   Config.Field.minimumDistance = (match minDis  with Some r -> r | None -> (Config.Field.default()).Config.Field.minimumDistance);
+   Config.Field.minimumMean     = (match minMean with Some r -> r | None -> (Config.Field.default()).Config.Field.minimumMean)
+   }}
 
 tokenInfo:
  TOKENIZATION tk=tokenizationType  
@@ -87,9 +103,9 @@ METHOD m=tkMethod
  {m}
   
 tkMethod:
-  RANK   {Config.Rank}
-| GLOBALCOUNT      {Config.GlobalCount}
-| NUMBERINFIELD  {Config.NumberInField}
+  RANK           prior=option(lang) {Config.Rank prior}
+| MAHALANOBIS    prior=option(lang) {Config.Mahalanobis prior}
+| NUMBERINFIELD                     {Config.NumberInField}
 | FREQUENCYINFIELD prior=option(lang) {Config.FrequencyInField prior}
 
 lang:

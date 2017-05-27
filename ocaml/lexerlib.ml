@@ -35,14 +35,13 @@ let parserWithError parser lexbuf =
        exit (-1)
      end
 
-(*
   | _ ->
      begin
        fprintf stderr "%a: syntax error when reaching this token: %s\n"
 	       printPosition lexbuf (Lexing.lexeme lexbuf);
        exit (-1)
      end      
- *)
+
 
 let parseInputFile parser filename =
   let lexbuf  = Lexing.from_channel (open_in filename) in

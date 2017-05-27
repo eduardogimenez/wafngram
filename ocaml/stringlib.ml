@@ -15,6 +15,13 @@ let forAllChar p str =
 let isNumber str =
   forAllChar (fun c -> let n = (Char.code c) in 48>n || n>57) str
 
+let isTextChar c =
+  let n = Char.code c
+  in  65 <= n && n <= 90 || 97 <= n && n <= 122 || 128 <= n && n <= 155 || n=43 || n=46 || n=44
+
+let isText str =
+  forAllChar (fun c -> not (isTextChar c)) str
+
 let isEqual str =
   let x = String.get str 0 in forAllChar (fun c -> c <> x) str
 	     
