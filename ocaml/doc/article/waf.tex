@@ -1,7 +1,12 @@
-\documentclass[runningheads,a4paper]{llncs}
+ \documentclass[runningheads,a4paper]{llncs}
 
 \usepackage[american]{babel}
 \usepackage[american]{amsmath}
+\usepackage[american]{amssymb}
+\usepackage[utf8]{inputenc}
+\usepackage{babel}
+\usepackage{calligra}
+\usepackage[T1]{fontenc}
 
 %better font, similar to the default springer font
 %cfr-lm is preferred over lmodern. Reasoning at http://tex.stackexchange.com/a/247543/9075
@@ -121,22 +126,33 @@ pdfstartview=Fit
 % correct bad hyphenation here
 \hyphenation{op-tical net-works semi-conduc-tor}
 
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\D}{\mathbb{D}}
+%\newcommand{\A}{\mathbb{A}}
+\newcommand{\A}{\calligra A}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\HTTP}{\textsc{http}\xspace}
+\newcommand{\HTML}{\textsc{html}\xspace}
+\newcommand{\dist}{\text{dist}}
+
+
+
 \begin{document}
 %This allows a copy'n'paste of the text from the paper
 \input glyphtounicode.tex
 \pdfgentounicode=1
 
-\title{Detection of Web Applications through Language Recognition}
+\title{An n-gram framework for recognizing web applications attacks}
 %If Title is too long, use \titlerunning
 %\titlerunning{Short Title}
 
-%Single insitute
-\author{Eduardo Giménez}
+%Single institute
+\author{Eduardo Gim\´enez}
 %If there are too many authors, use \authorrunning
 %\authorrunning{First Author et al.}
 \institute{ICT4V}
 
-%Multiple insitutes
+%Multiple institutes
 %Currently disabled
 %
 \iffalse
@@ -146,9 +162,9 @@ pdfstartview=Fit
 %\authorrunning{First Author et al.}
 
 \institute{
-Insitute 1\\
+Institute 1\\
 \email{...}\and
-Insitute 2\\
+Institute 2\\
 \email{...}
 }
 \fi
@@ -156,189 +172,138 @@ Insitute 2\\
 \maketitle
 
 \begin{abstract}
-The abstract.
+We present a framework for detecting code injection attacks on web
+applications based the n-gram frequency signature of HTTP fields and application
+parameters. The approach is based on a positive description of the
+expected application behavior, so it can detect new attack techniques more
+easily than the rule-based approach that is available in Web Application Firewalls such as
+ModSecurity. It provides a high accuracy level and low false alarms compared
+with the OWASP core rule set for ModSecurity. Experimental results shows
+that the approach is compatible with time constrains imposed for on-line package
+analysis.
 \end{abstract}
 
-\keywords{...}
+\keywords{Web Application Firewall, anomaly detection, n-gram model}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Context and motivations}\label{sec:intro}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+By its very nature, web applications are designed to be exposed in the Internet. This means that its owner can not govern who actually connects to the application and  therefore are available to any Internet user. This feature makes them a primary target of any attacker that wants to get access to the assets (data bases) that the application manages or to place baits (e.g., fake URLs to his own site) to lure honest users.
 
-This work focuses on preventing the misuse of Web Applications. A web application is piece of software that develops a coordinated set of functions based on a client-server arquitecture, in which the client runs on the user’s web browser. The information between the user’s client and the application server is transmitted using the HTTP protocol.
+The code of a web application frequently contains vulnerabilities like the ones listed in \cite{OWASPTop10}. Searching and fixing these vulnerabilities in the application code is a time consuming activity, and frequently the application can not remain off-line until they have been fixed. For this reason, we are rather interested in virtual patching, a technique in which a second software component, external to the web application, is placed between the web application and its users. This component, usually called a Web Application Firewall (WAF), intercepts and inspects all the traffic between the server and the clients, searching for attacks not in the headers but inside the \HTTP packet contents. Once recognized, the suspicious packets are then processed in a different way (logged, suppressed, derived to a honeypot application, etc.). ModSecurity \cite{ModSecurity} is an open source, widely used WAF enabling real-time web application monitoring, logging, and access control. 
 
-The kind of applications in which we are mainly interested are the ones used for e-government purposes. These are rather simple web applications which propose register and consulting functions, mostly made of static HTML. They either displays information to the user, lets the user to fill in a form to register some piece of information, or in order to return some piece of information to the user, such as an HTML page including information in a database, a PDF file or the like. 
+The actions that ModSecurity undertakes are driven by rules. The administrator specifies rules about the contents of the \HTTP packets through regular expressions. ModSecurity intercepts each packet from and to the protected web application. If the packet matches a rule, then the actions specified in that rules are fired. ModSecurity offers a default package of rules for tackling the most usual vulnerabilities spotted in the \cite{OWASPTop10}, known as the OWASP ModSecurity Core Rule Set (CRS). However, an approach only based on rules also has some drawbacks: rules are a static and rigid by nature and the CRS usually produce a rather high rate of false positives \cite{ModSecurityFalseRate}. Rule tuning is a time consuming and error prone task, which has to be manually performed for each specific web application. Our long term purpose is to improve ModSecurity with anomally detection techniques that provide higher levels of flexibility and adaptability. Those approaches take advantage of sample data about what the normal behavior of the web application is, in order to spot suspicious situations which fall out of this nominal use (anomalies), and which could correspond to on-going attacks. 
 
-By its very nature, web applications are designed to be exposed in the Internet. This means that its owner can not govern which user actually connects to the application and  therefore are available to any Internet user. This feature makes them a primary target of any attacker that wants to get access to the assets (data bases) that the application manages or to place baits (e.g., fake URLs to his own site) to lure honest users.
+\section{Code injection attacks from a language perspective}
 
+In a usual use case of a web application, the user has to fill a form with data, which is then used to assemble an SQL database query and return the retrieved information to the user. In many programming languages, the programmer assembles the query concatenating strings, including part of the data supplied by the user in the form. If such data is not correctly sanitized, an attacker may take advantage of this mthod to inject a carefully crafted piece of code that discloses unauthorized information or internally damages the application. For example, let us assume that the application displays the form field \textit{user} and assembles the following query from its contents \textit{query := \enquote{\textsc{select} * \textsc{from} users \textsc{where} name = '} + userName \textsc{+} \enquote{'} }, where the plus stands for string concatenation. If the value \enquote{Juan Perez} is supplyed as user name, then Juan Perez's record in the database is returned and displayed. However, should the attacker supply the string \textit{Juan Perez' \textsc{or nor like} 'xx}, the assembled query becomes \textit{\enquote{\textsc{select} * \textsc{from} users \textsc{where} name = ‘Juan Perez’ \textsc{or not like} 'xxx'}}, which returns Juan Perez's record plus all the records of users whose name does not match the string \textit{xxx} (which are probably all the users in the database). 
 
-The code of a web application may contain vulnerabilities, and it is usually unknown which they are or where are they placed. For instance, a field in some form could be sensible to SQL injection, the database could have been previously infected with an URL that is displayed in the returned HTML page, or any of the vulnerabilities described in [OWASP]. Placed in this context, we are interested in developing automated tools that could help us to prevent the attackers from exploiting those vulnerabilities, or once exploited, can be easily deployed to content the incident minimizing the damages. 
+In its most general version, code injection consists in the malicious provision of unexpected input data which modifies the intended purpose of an executable, interpreted piece of code. Beyond SQL injection, this technique may be applied to several query languages that are usually used in web applications, such as \textsc{xldap}, \textsc{os} commands, \textsc{xpath}, \textsc{xml} parsers, \textsc{SMTP} headers, \textsc{nosql}, among others. It can be applied not only to human supplied form fields, but also to other fields in the \HTTP requests that usually are automatically filled by the web navigator, and which are used on the web server side to perform queries about supported features, better rendering, etc. In the sequel, we use the term \textit{field} to mean either an application web form field, or one of the fields described in the \HTTP protocol.
 
-Furthermore, our main concern is not fixing the underlying problem, namely, the buggy web application code which contains the vulberabilities. The reason is that searching for those bugs is a time consuming activity and frequently the application can not remain off-line until it has been successfully completed. For the very nature of the applications we are interested in, downtime has to be minimnized as much as possible. Moreover, in some cases the source code of the web application may not be easily available for inspection, either because the provider who sold it to the organization is reluctant to show the details of its code, or because the organization has no longer trace of the source code itself.
+From a language perspective, code injection attacks always involve mixing two languages: the expected language for a given field and a piece of a query programming language. In the former example, the expected language for the field correspond to personal names in Spanish, while the query programming language is SQL. Starting from this fact, detecting such kind of attacks may be considered as a particular case of detecting multiple languages in a given piece of text. Our research program is therefore to find conexions between NLP techniques and WAF attack detection, through the application of pattern recognition approaches.
 
-Instead of focusing in the web application code, we are rather interested in virtual patching. Virtual patching is a technique in which a second software component, external to the web application, is placed between the web application and its users. This component, usually called a Web Application Firewall (WAF), intercepts and inspects all the traffic between the server and the clients, searching for those packets that look like part of an attack. Once recognized, the suspicious packets are then processed in a different way (logged, suppressed, derived to a honeypot application or whatever). ModSecurity [ModSec] is an open source, widely used WAF enabling real-time web application monitoring, logging, and access control. It gives access to the HTTP traffic stream, in real-time, along with the ability to inspect it and take any of the aforementioned actions. 
-The actions that ModSecurity undertakes are driven by rules. The administrator specifies rules about the contents of the HTTP packets through regular expressions. ModSecurity intercepts each packet from and to the protected web application. If the packet matches a rule, then the actions specified in that rules are fired. ModSecurity offers a default package of rules for tackling the most usual vulnerabilities spotted in the OWASP Top 10, known as the OWASP ModSecurity Core Rule Set (CRS). 
+A well known technique for identifying the language of a piece of text is to measure the frequency of the n-grams occurring in the text. An n-gram is a sequence of $n$ consecutive symbols of the alphabet used in the text (for example, \textsc{utf8} symbols). For instance, the most frequent trigrams in Spanish are \textit{del} and \textit{que}. On the other hand, the trigrams \textit{whe} and \textit{ike} are very rare in Spanish, but not in an SQL sentence, as they apear in the keywords \textsc{where} and \textsc{like}. 
 
-The possibility for the user to specify its own rules rather than using a wired policy is one of the interesting features of ModSecurity, which enables to tailor the WAF to each specific application. However, an approach only based on rules also has some drawbacks. First, rules are a static and rigid by nature. They are well suited for describing known attack scenarios, but they may fail to cover slightly different ones, or even totally new ones. Also, as a side effect, covering all the attack variants usually result in quite complicated regular expressions and rules, which are difficult to understand, maintain and modify. Second, practice has shown that the CRS usually produce false positives. Such situations are handled by tuning the rules through the introduction of exceptions. Exception rules handle specific situations for specific fields or cases which require to allow traffic matching some of the CRS rules. However, this is usually a time consuming and error prone task, which has to be done for each specific web application.
-
-In tradicional networks firewalls and IDS, the approach based on rules has been successfully complemented with other tools based on machine learning, anomaly detection and other statistical approaches which provides higher levels of flexibility and adaptability. Those approaches take advantage of sample data about what the “normal” behavior of the web application is, in order to spot suspicious situations which fall out of this “normal use” (anomalies), and which could correspond to on-going attacks. Our long term purpose is to improve ModSecurity with such anomaly detection techniques.
-
-\section{Code injection attacks}
-
-A usual use case in e-governement web applications is to ask the user to fill a form wiht data, which is then used to assemble an SQL database query and return the retrieved information to the user. In many programming languages, the programmer assembles the query concatenating strings, including part of the data supplied by the user in the form. If such data is not correctly sanitized, an attacker may take advantage of this mthod to inject a carefully crafted piece of code that discloses unauthorized information or internally damages the application. For example, the form contains a field \textit{user} that the application uses to assemble the following query as the string \texttt{query := "SELECT * FROM users WHERE name = '" + }\textit{userName}\texttt{ + “ ';"}. If the field is filled with the data \texttt{John Smith}, then the record for John Smith is the users table of the database is returned and displayed. However, should the attacker enter the data \texttt{John Smith’; DROP TABLE users; SELECT userinfo WHERE ‘t’=‘t}, the string results in the query \texttt{query := ``SELECT * FROM users WHERE name = ‘John Smith’;DROP TABLE users;SELECT userinfo  WHERE ‘t’=‘t’}, which removes the users table from the application database. 
-
-In its most general version, code injection consists in the malicious provision of unexpected input data which modifies the intended purpose of an executable, interpreted piece of code. Beyond SQL, this technique may be applied to many query languages that are usually used in web applications, such as XLDAP, OS commands, XPath, XML parsers, SMTP headers, NoSQL, among others. It may be applied no only to human supplied form fields, but also to other fields in the HTTP requests that usually are automatically filled by the web navigator, and which are used on the web server side to perform queries about supported features, better rendering, etc. 
-
-\section{A language perspective}
-
-From a language perspective, code injection attacks always involve mixing two languages: the expected language for a given field and a piece of a query programming language. In the former example, the expected language for the field correspond to personal names in natrual language, while the query programming language is SQL. Starting from this fact, we propose that detecting such kind of attacks may be considered as a particular case of detecting multiple languages in a given piece text. Our research program is therefore to find conexions between NLP techniques and attack detection in WAF, through the application of pattern recognition techniques.
-
-A well known technique for identifying language of a piece of text is to measure the occurrence frequency of the n-grams occurring in the text. An n-gram is a sequence of n consecutive symbols of the alphabet used in the text (for example, UTF8 symbols). For instance, the most frequent trigrams in Spanish are \textit{DEL} and \textit{QUE}. On the other hand, the trigrams \textit{WHE} and \textit{OP+} are very rare in Spanish, but not in an SQL sentence, as they apear in the keywords DROP and WHERE. 
-
-We discarded the approach of analysing word ocurrences insted of n-gram ones, because this requires a tokenization pre-processing of the text, which can be much more complicated. Tokenization is the process of spliting the text into tokens (sequences of consecutive symbols) between two delimiters, which are then discarded from the analysis. In natural language, there are very few delimiters (namely, blanks, dots, commas) and they are not relevant for identifying the language. This is not the case of programming languages, where the number of nested parentheses, semicolons or other delimiters is usually higher than in natural language and relevant for the analysis. Moreover, the discarding the semicolon delimiters in a sequence like \texttt{‘;DROP+TABLE+users;SELECT+userinfo+WHERE+‘t’=‘t} results in a loss of information, as the opening sequence \texttt{';} is a common pattern in SQL injection attacks. Furthermore, the tokenization process depends on the lexical conventions of each programming language, as the delimiters vary from one programming language to the other. An alternative could be to consider as potential delimiters the union of the delimiters of all the programming languages to consider. However, some symbols that are delimiters in one programming language may be part of programming constructions in other languages, so suppressing them may destroy relevant sequences for the analysis. On the other hand, a text can be split in n-grams following a very simple, fast and linear algorithm, in which a windows of length \textit{n} is shifted all along the text, and the process is the same independently from the programming languages to be considered.
-
-In spite of the enumerated advantages, there is at least one case in which there exist a clear delimiter that justifies adopting a word tokenization approach rahter than n-grams: the URI field of the HTTP requests is a sequence of character strings separated by the slash symbol (\texttt{/}). For this case paticular case we adopt the usual tokenization approach, splitting the whole string into the sub-strings delimited by the slashes. Once this is done, the approach will be the same as for n-grams, just taking each sub-string as a single symbol. For example, the URI \texttt{http://www.example.com/store/members} after tokenization is the list $["\texttt{http:}", "\texttt{}", "\texttt{www.example.com}", "\texttt{store}", "\texttt{members}"]$, and a bigram of this sequences is $[\texttt{store},\texttt{members}]$.
-
-Another requirement to be fulfilled is to be able to provide \textit{evidence} of the anomaly when an HTTP request is rejected. When using n-grams as attributes this can be easily related to some pieces of the input data that are considered outliers.
+A string can be split in n-grams following a very simple, fast and linear algorithm, in which a windows of length \textit{n} is shifted all along the text, and the process is the same independently from the programming languages to be considered. In the case of the URI field there is a clear word delimiter (the slash symbol: /), so the string is separated into a list of words (not characters) separated by this delimiter. Once this is done, the approach is the same as for n-grams, just taking each word as a single symbol of the URI language. 
 
 \section{N-gram model framework}
 
-We developed and compare three different models based on n-gram frequencies. All the three models are different instances of the same pattern. We start from a set $Tr$ of training HTTP requests, that we assume are legit requests. Let us call $F=N_H \times P$ the set of \textit{model fields} formed by an HTTP request field name in $N_H$ and either a parameter name in $P$ (if the field contains parameters, as may be the case in the \texttt{URI} or \texttt{Body} fields), or a special value $\bot$, otherwise. The collection of attributes $A$ of the model is the set of n-grams contained in the contents of each model field in the training set $Tr=\{r_1,\ldots r_{\mid Tr \mid}\}$. In other words, we do not consider the raugh n-grams in the HTTP request fields, but we parse the command structure, and consider each form field in the web application as an independent language to be modeled. The variable $n$ is consider a parameter of the model that can be adjusted. In practice, we only consider $n=1,2,3$. Beyond 3, the frequency of any n-gram become very rare, and threfore meaningless for identifying the language.
+We developed and compare three different models based on n-gram frequencies, all of them instances of the same framework. The variable $n$ is consider a parameter of the model that can be adjusted. In practice, we only consider n-grams of length $m$, with $m \leq n=1,2,3$. Beyond 3, the frequency of any n-gram become very rare, and threfore meaningless for identifying the language.
 
-We associate a random variable $X_a$ to each attribute $a=(x,z) \in A$, which measures events related to the ocurrences of the n-gram $z$ in the model field $x$. We focus on two types of events: the number of ocurrences of the n-gram in the model field (integer value) or its frequency (that is, the number of ocurrences of the n-gram divided into the total amount of n-grams of this model field). Measuring the number of n-grams is better suited for those model fields having an enumerated type of possible values. Mesuring the n-gram frequency performs better when the field length may significantly vary from one requesto to another. For example, a message field in a contact form of the web application may be arbitrarly long, so the number of ocurrences of a given symbol may be quite different depending on the message. However, the frequency of that symbol will be rather stable.
+We start from a training set $Tr=\{r_1,\ldots r_{\mid Tr \mid}\}$ of legit \HTTP requests. An \HTTP request is just a string, as illustrated in Figure \ref{\HTTPRequest}. It is made of a header, a collection of field names and their values separated by a semicolon, and a request body. The \HTTP protocol does not impose any structure on a request body. However, most of the interaction with the web application user consists in presenting \HTML forms to be filled and answers to the filled forms. Once filled, \HTML forms are transmitted to the server as a list of pairs $\text{m}_1=\text{v}_1 \text{&} \ldots \text{m}_k=\text{v}_k$ separated by the \textit{&} symbol. We do not work directly form the request string itself. We first parse its structure, keeping the \HTTP field and parameter contents, and exclluding their names from the n-gram analysis. Therefore, the \textit{model fields} are formed by an \HTTP request field name in $N_H$ and either a parameter name from a $P$, or a special value $\bot$, otherwise. The collection of attributes $A$ of the model is the set of n-grams extracted from the contents of each model field in the requests of $Tr$.
+
+The \textit{attributes} of the model are the n-grams that can be found in the model fields contents. Each attribute is a pair $(x,z) \in A$ made from a model field $x$ and an n-gram $z$. We associate a random variable $X_a$ to each attribute $a=(x,z) \in A$, which measures events related to the ocurrences of the n-gram $z$ in the model field $x$. We focus on two types of events: the number of ocurrences of the n-gram in the model field (integer value) or its frequency (that is, the number of ocurrences of the n-gram divided into the total amount of n-grams of this model field). Measuring the number of n-grams is better suited for those model fields having an enumerated type of possible values. Mesuring the n-gram frequency performs better when the field length may significantly vary from one requesto to another. For example, a message field in a contact form of the web application may be arbitrarly long, so the number of ocurrences of a given symbol may be quite different depending on the message. However, the frequency of that symbol will be rahter the same in all messages.
 
 %We consider four possible types of random variables, resulting from the combination of the following criteria:
 %\begin{itemize}
 %\item Whether the random variable measures 
-%\item Whether each HTTP requests gives raise to an independent sample of the random variable, or the whole training set $Tr$ is considered as a single sample. In the first case, the value of $X_a$ for the whole set results from the average for each HTTP request sample, while in the second this value is computed exactly from all the samples.
+%\item Whether each \HTTP requests gives raise to an independent sample of the random variable, or the whole training set $Tr$ is considered as a single sample. In the first case, the value of $X_a$ for the whole set results from the average for each \HTTP request sample, while in the second this value is computed exactly from all the samples.
 %\end{itemize}
 
-A distribution for these variables is a tuple $d=(\mu, \sigma, max, min, N_d)$, where $\mu \in R$ is the distribution mean, $\sigma^2 \in R$ the distribution variance, $max$ and $min$ the maximum and minimum values that were sampled for $X$, and $N_d$ the number of sampled values. We consider two functions $singl : R \rightarrow D$ which constructs a distribution $(r,0,r,r,1)$ from a single real value $r$ and a function $sample: D \rightarrow R \rightarrow D$ which adjusts the parameters of a previous aproximation to a given distribution $d$ with a new sampled value $r$. A map $M : A \rightarrow D$ describes the expected distributions for the random variables $X_a$ of attribute $a$. This mapping provides the signature of the language associated to each model field $x$, and is inductively constructed from the training set $Tr$, iterating the $sample$ function from the initial application of the $singleton$ one.
+A \textit{distribution} for these variables is a tuple $d \in \D = (\mu, \sigma, max, min, N_d)$, where $\mu \in \R$ is the distribution mean, $\sigma^2 \in \R$ the distribution variance, $max,min \in \N$ the maximum and minimum values that were sampled for $X$, and $N_d\in\N$ the number of sampled values. A distribution is iteratively constructed using the on-line computation of its parameters described in \cite{Knuth}. This iterative process uses two functions: $\text{singleton} : \R \rightarrow D$ which constructs the single-point distribution $(r,0,r,r,1)$ from a single real value $r$, and $\text{sample}: \D \rightarrow \R \rightarrow \D$ which adjusts the parameters of a previous aproximation to a given distribution $d$ with a new sampled value $r$ as it is explained in \cite{Knuth}. A map $M : \A \rightarrow \D$ describes the expected distributions for the random variables $X_a$ of attribute $a$. This mapping provides the signature of the language associated to each model field $x$, constructed iterating these two functions from the training set $Tr$.
 
-The arriving HTTP request shall be analized on-line, one by one. In order to test an HTTP request $r$, the map $M_r$ is first constructed for the training singleton \{r\}. Then, a score $s=d_x(M,M_r)$ is computed for each model field $x$ in the HTTP request using a distance function $d$ which compares the distance between the expected distributions of n-grams provided by the model $M$ and the actual distributions $M_r$ extracted from $r$. If the distance satisfies some given criterion $C$, the request is considered acceptable, otherwise it is considered an outlier. By default, this criterion is being outside the rank defined byt he minimum and maximum values of the n-gram distribution, that is,  $C(s,s_r) = s.min \leq s_r.\mu \leq s.max$
+The WAF shall analyze the \HTTP requests on-line, one by one. In order to test a given request $r$, the map $M_r$ for the training singleton $\{r\}$ is first constructed. Then, each \HTTP field $x$ of $r$ is considered. If $x$ is not defined in the mapping $M$, then $r$ is rejected. Otherwise, a score $s=\dist_x(M,M_r)$ is computed for $x$ using a distance function $\textit{dist}_x$ which compares the distance between the expected distributions of n-grams provided by the model $M$ for $x$ and the actual distributions $M_r$ extracted from the field $x$ of $r$. Different distances may be associated to differente fields. If the score satisfies some given criterion $C$, the request is considered valid, otherwise it is considered an outlier. The default criterion is being outside the rank defined by the minimum and maximum values of the n-gram distribution, that is,  $C(s,s_r) = s.min \leq s_r.\mu \leq s.max$.
 
-This procedure is repeated for each model field $x$. If the contents of any of the model fields in the HTTP request $r$ is evaluated as an outlier, the whole HTTP request is processed as dangerous (fileterd, logged, derived to a honeypot application, depending on the web application security policy). The evidence for the anomaly of $r$ in field $x$ is provided by the set of n-grams $\{ z \mid  |M_x(z).\mu - M_{r,x}(z).\mu | > p^n_x \land M_x(z).\mu > m^n_x\}$ for some ceil distances $p^n_x$ and n-gram frequencies $m^n_x$ depending on the n-gram length $n$ and the model field $x$ (all of them taken as zero, by default). This is what enables the security analyst to understand why the WAF rejected the request. It is also what enables a fine tuning of the model.
+If theres is a model field $x$ of $r$ for which its ontent is evaluated as an outlier, then the whole \HTTP request is deemed as anomalous and processed accodingly. The evidence for the anomaly of $r$ in field $x$ is provided by the set of n-grams $\{ z  \mid  \lvert M(x,z).\mu - M_{r}(x,z).\mu \rvert > p^n_x \land M_x(z).\mu > m^n_x\}$ for some given ceil values $p^n_x$ and n-gram frequencies $m^n_x$, which are parameters of the model. This evidence is what enables the security analyst to understand why the WAF rejected the request. It is also what enables a fine tuning of the model. Notice that these parameters depend on the n-gram length $n$ and the model field $x$. By default these parameters are taken as zero. 
 
-\subsection{Model Tuning}
+In practice, the training set $Tr$ will be a small fragment of all possible \HTTP requests, so it may happen that a given attribute $a$ found in the test request $r$ is not present in $Tr$, but still a valid input. However, most of the fields contains values that are a subset of some larger language. For instance, a form field in the web application corresponding to an address in Montevideo is a particular case for a piece of text written in Spanish. Such larger language has its own language signature, which can be used as a prior. Should a given n-gram not be defined in $M$ for that field, we use that prior as the expected value for the model. 
 
-In practice, the training set $Tr$ will be a small fragment of all possible HTTP requests, so it may happen that a given attribute $a$ found in the test request $r$ is not present in any of the request of the training field $Tr$, but still a valid input. However, most of the fields contains values that are a subset of some larger language. For instance, a form field in the web application corresponding to an address in Montevideo is a particular case for a piece of text written in Spanish. Such larger language has its own language signature, which can be used as a prior. In the case a given n-gram is not be defined in $M$ for that field, we use that prior as the expected value for the model. We take as priors distributions the ones proposed in \cite{priors}. Several sites offer countings or the mean for n-grams made of letters extracted from large Spanish corpuses such as Wikipedia articles. Unfortunatelly, we do not found any of them considering n-grams containing blank spaces and punctuation symbols, nor proposing n-gram variances from one Spanish document to another. The variance of those n-grams in the prior is considered as being zero.
+Some parameters of the web application may contain random data by its very nature. For instance, a parameter containing the user password should be in principle any sequence of symbols, and all sequences should be equally likely. In such cases there is no hope to find a language signature for the field, so the field is excluded from the model. In other cases, even if the language is not completely random, the principal feature regards the allowed symbols, but not how they are combiined. For example, a parameter containing e-mail addresses contains at most one single \texttt{@} symbol, frequently a single dot in the domain name, no other special characters, but almost any possible combination of two letters can be expected. As a consequence, a particular $n$ is chosen for each field. 
 
-The contents of some parameters of the web application may be random data by its very nature. This is the case, for instance, of a peremeter containing the user's password: a password should be in principle any sequence of symbols, and all sequences should be equally likely. Furthermore, for security reasons, it would not be a good idea that the WAF stores information about the distribution of such sensible fields. In those cases, we simply ignore the parameter field in the model. The consequence of this choice is that we will not be able to detect attacks performed on those fields. A negative classification approach should be adopted for such fields, searching for those n-grams that are likely to appear in an attack, rather than positively characterising normal values. 
+In practice, not all n-grams are relevant. Actually, some distinctions are more problematic than helpfull. For example, the IP address 168.192.0.1 does not better characterise valid requests than the IP 168.192.0.2. On the other side, counting the number of ocurrences of each particular IP address is more prone to overfitting. For this reason, we do not directly work on the n-grams themselves, but on an abstraction resulting from the following transformations: (a) Letters are uncapitalized, (b) accents are removed and (c) n-grams made only of numbers are collapsed into the capital letter \enquote{\textit{N}}.
 
-In practice, not all n-grams are relevant. Actually, some distinctions are more problematic than helpfull. For example, does the IP address 168.192.0.1 better characterise valid requests than the IP 168.192.0.2? Certainly not, and on the other side, counting the number of ocurrences of each particular IP address is more prone to overfitting. For this reason, we do not directly work on the n-grams themselves, but on an abstraction resulting from the following transformations: 
-\begin{itemize}
-\item Letters are uncapitalized
-\item Accents are removed (for instance, the letter \textit{á} is transformed into \textit{a}
-\item N-grams made only of numbers are collapsed into the capital letter \textit{N}
-\end{itemize}
+\section{Three n-gram models}
 
-\section{Experimental results for three n-gram models}
+Providing a particular set of random variables $X_a$ for the attributes, a particular distance $d$ between language signatures and particular outlierness criteria $C$ and evidence criteria $E$, we obtain an particular for tackling the code injection problem using n-grams. 
 
-Providing a particular set of random variables $X_a$ for the attributes, a particular distance $d$ between language signatures and particular outlierness criteria $C$ and evidence criteria $E$, we obtain an particular for tackling the code injection problem using n-grams. In the rest of this section, we describe the results with three models obtained from this general pattern for the CISC2010 dataset available at \cite{CISC2010}. This dataset provides a collection of normal and abnormal HTTP requests for a tiny web application for an on-line store. The application enables the user to fill a shopping car and then pay. The dataset is made of 36.000 valid request for the training set, another 36.000 different valid requests for testing normal behavior (NTR), and 25.000 abnormal test requests (ATR), mixing different kinds of attacks and valid requests with infrequent characters in the parameter fields (typos). Unfortunatelly, attacks and valid but infrequent requests are not distinguished in the ATR. 
+%\subsection{Mahalanobis distance}
 
-The model performance on the data set is measured using the usual indicators for detection rate and false alarm rate. The detection rate corresponds to the porcentage of the ATR file that is detected training the model with the whole $Tr$ set. The false alarm rate corresponds to the percentage of the NTR file that is pointed as abnormal.
-
-\subsection{Mahalanobis distance}
-
-In this model, the random variable $X_a \in R$ associated to the attribute $a=(x,z)$ measures the frequency of n-gram $z$ in the contents of te model field $x$, that is, the number of occurrences of $z$ in the contents of $x$ divided into the total number of n-grams in $x$. The frequency in the model is estimated as the average of the frequencies for each request $r_i \in Tr$.
-
-The distance between two language signatures for field $x$ the is mesured applying Mahalanobis distance, as described in \ref{MahalanobisDistance}. Let $N = \{ z \mid a=(x,z) \in F  \}$, Mahalanobis distance is defined as follows:
-
+\textbf{Mahalanobis distance.} In this model, the random variable $X_a \in R$ associated to attribute $a=(x,z)$ measures the number of occurrences of $z$ in the contents of $x$ divided into the total number of n-grams in $x$, i.e., the frequency of $z$ in $x$. The distance between two language signatures is mesured using Mahalanobis distance \ref{MahalanobisDistance}. Let $N_x = \{ z \in S^* \mid a=(x,z) \in \A  \}$ the set of n-grams collected for field $x$. Mahalanobis distance is defined as follows:
 \begin{align*}
 \label{MahalanobisDistance}
-d_x(M,M_r) & = \sum_{z\in N} \frac{ | M_x(a).\mu - M_{r,x}(a).\mu |}{1+M_{r,x}(a).\sigma}\\
-            & = \infty, \text{if} M_x(a) \text{is undefined} 
+\textit{dist}_x(M,M_r) & = \sum_{z\in N} \frac{ | M_x(a).\mu - M_{r,x}(a).\mu |}{1+M_{r,x}(a).\sigma}\\
+           & = \infty, \text{if } M_x(a) \text{ is undefined} 
 \end{align*}
+Mahalanobis distance compare the means of each n-gram distribution, and relates them to the variance of such n-gram. In this way, differences for n-grams with high frequency variance do not weight as differences with respect to n-grams with a rather constant frequency. A constant $1$ is added to the denominator to prevent a division by zero for those n-grams with constant frequency. If the n-gram $z$ was never seen in the training set nor in the prior, then $M_x(a)$ is undefined, a special score value $\infty$ greater than any other possible scrore is assigned to the attribute, causing the field contents to be considered as an outlier.   
 
-The mapping $M(a)$ associates the parameters of the distribution that is the language signature for $x$. Mahalanobis distance compare the means of each n-gram distribution, and relates them to the variance of such n-gram in the model. In this way, the differences in those n-grams with high variance does not pound as differences with respect to n-grams which are rather constant frequency. A constant $1$ is added to the denominator for preventing a division by zero for those n-grams that have a constant frequency. For determining whether an n-gram $z$ is an outlier we use max-min. If the attribute $a$ was never seen in the training set, then $M_x(a)$ is undefined, and there is no reference distribution for the attribute. If this is the case, a special score value $\infty$ greater than any other possible scrore is assigned to the attribute, causing the field contents to be considered as an outlier.   
-
-Table \ref{MahalanobisModelResults} shows the value of the indicators for this model, taking n-grams of length $n=1,2,3$. The best compromise is obtained for $n=2$.
-
-\begin{table}[]
-\centering
-\caption{Mahalanobis model}
-\label{MahalanobisModelResults}
-\begin{tabular}{|l|l|l|l|}
-\hline
-                 & n = 1   & n = 2  & n = 3    \\
-\hline
-Detection Rate   &  0.965  & 0.984  & 0.992    \\
-\hline
-False Alarm Rate &  0.002  & 0.005  & 0.013    \\
-\hline
-\end{tabular}
-\end{table}
-
-Inspecting the evidence generated for the rejected requests, we notice that......
-
-\subsection{Ranking}
-
-This model is inspired from a usual method for detecting language mixures in the web \cite{XX}. The random variable $X_a \in R$ associated to the attribute $a=(x,z)$ measures the number of ocurrences of n-gram $z$ in the contents of model field $x$ along all the requests in the training set $Tr$. Then, the model is post-processed, and the n-grams ocurring in each field $x$ are arranged in decreasing order respect to the mean of its frequency.  The resulting ordered list of attributes $[a_a,\ldots a_n]$ is the language signature of model field $x$, and the model $M$ is the function $M_x(a_i)=\text{singleton}(i) \in D$ providing the position in that list. In order to compare the language signature for $x$ obtained from the test request $r$ to the expected language signature by adding the difference in the ranking position for each n-gram ocurring in $r$. 
-
+\textbf{Ranking.} This model is inspired from a usual method for detecting multilanguage pages in the web \cite{Cavnar94n-gram-basedtext}. The random variable $X_a \in R$ associated to the attribute $a=(x,z)$ measures the number of ocurrences of n-gram $z$ in the contents of model field $x$ along all the requests in the training set $Tr$. Then, the model is post-processed, and the n-grams ocurring in each field $x$ are arranged in decreasing order respect to the mean of its frequency.  The resulting ordered list of attributes $[a_a,\ldots a_n]$ is the language signature of model field $x$, and the model $M$ is the function $M_x(a_i)=\text{singleton}(i) \in D$ providing the position in that list. In order to compare the language signature for $x$ obtained from the test request $r$ to the expected language signature by adding the difference in the ranking position for each n-gram ocurring in $r$. 
 \begin{align*}
 \label{RankDistance}
 d_x(M,M_r) & = \sum_{z\in N} \lvert M_x(a).\mu - M_{r,x}(a).\mu\rvert \\
-           & = \infty, \text{if } M_x(a) \text{ is undefined} 
+          & = \infty, \text{if } M_x(a) \text{ is undefined and} \lvert a\rvert = 1 \\
+          & = \lvert  N_x \rvert, \text{if } M_x(a) \text{ is undefined and} \lvert a\rvert > 1
 \end{align*}
+Monograms that were not seen for this field in the training dataset nor in the prior distribution associated to the model field (if any) take the $\infty$ score and are therefore rejected. The reason is that unexpected symbols are usually a good indicator of a code injection attack. On the other side, the possibility of missing valid bigrams and trigrams in the training set is considerable, so those n-grams do not cause an inmediate rejection. Instead, they contribute with a high score, equal to the length of the list of seen n-grams for this field. 
 
-Table \ref{RankModelResults} shows the value of the indicators for $n=1,2,3$.
-
-
-\begin{table}[]
-\centering
-\caption{Rank model}
-\label{RankModelResults}
-\begin{tabular}{lllllllll}
-                 & n = 1   & n = 2   & n = 3   \\
-Detection Rate   & 0.969   &  0.990  & 0.992   \\
-False Alarm Rate & 0.001   &  0.016  & 0.033   \\
-\end{tabular}
-\end{table}
-
-\subsection{Mismatch count}
-
-In the third model considered the score consists in just counting the number of evidence elements, that is, how many n-grams are outliers with respecto to their expected distribution. 
-
+\textbf{Mismatch count.} In this model the score consists in just counting the number of evidence elements, that is, how many n-grams are outliers with respecto to their expected distribution. 
 \begin{equation}
 \label{MismatchCountDistance}
 d_x(M,M_r) = \lvert \{ z \ mid \lvert M_x(z).\mu - M_{r,x}(z).\mu\rvert > p^n_x \& M_x(z).\mu > m^n_x\} \rvert 
 \end{equation}
+The parameters $p^n_x$ and $m^n_x$ can be used to tune the model. Parameter $p^n_x$ is used to prune those n-grams that are very 
 
-The model parameters $p^n_x$ and $m^n_x$ can be used to tune the model. Figure \ref{FrequenciesModelResults} shows the results when taking $p^1_x = 0.01$, $p^1_x = 0.05$ and $p^1_x = 0.1$ on one hand and $m^1_x=0.001$, $m^1_x=0.01$ and $m^1_x=0.003$ for all model field $x$.  
+\section{Experimental results}
 
+The described framework was implemented using the Ocaml programming language \cite{wafngram}. We tested the three n-gram models proposed on the CISC2010 dataset \cite{CISC2010Dataset}. This dataset provides a collection of normal and abnormal \HTTP requests for a tiny web application for an on-line store. The application enables the user to fill a shopping car and then pay. The dataset is made of 36.000 valid request for the training set, another 36.000 different valid requests for testing normal behavior (NTR), and 25.000 abnormal test requests (ATR), mixing different kinds of attacks and valid requests with infrequent characters in the parameter fields (typos).
+
+The model performance on the data set is measured using the usual indicators for detection rate and false alarm rate. The detection rate corresponds to the porcentage of the ATR file that is detected training the model with the whole training dataset. The false alarm rate corresponds to the percentage of the NTR file that is pointed as abnormal. Table \ref{ExperimentalResults} shows the indicators obtained for each type of model and given n-gram length. In the case of the mismatch count model, the table shows the results when taking $p^1_x = 0.01$, $p^1_x = 0.05$ and $p^1_x = 0.1$ on one hand and $m^1_x=0.001$, $m^1_x=0.01$ and $m^1_x=0.003$ for all model field $x$. 
+ 
 \begin{table}[]
 \centering
-\caption{Independent Frequencies model}
-\label{FrequenciesModelResults}
-\begin{tabular}{lrrr}
-                 & n = 1   & n = 2   & n = 3   \\
-Detection Rate   & 0.966   &  0.985  &  0.992  \\ 
-False Alarm Rate & 0.001   &  0.004  &  0.012  \\ 
+\label{ExperimentalResults}
+\begin{tabular}{|l|l|l|l|l|l|l|l|l|l|}
+\hline
+& \multicolumn{3}{c}{\textbf{Mahalanobis}} \vline & \multicolumn{3}{c}{\textbf{Rank}}\vline  & \multicolumn{3}{c}{\textbf{Mismatch count}} \vline\\
+\hline
+\hline
+       Ngram length       &  1   &    2   &   3   &   1   &   2   &   3   &    1  &    2  &    3   \\    
+\hline
+       Detection Rate    & 0.965 & 0.984 & 0.992 & 0.969 & 0.990 & 0.992 & 0.966 & 0.985 &  0.992  \\  %0.965 0.988   0.979
+\hline
+       False Alarm Rate  & 0.002 & 0.005 & 0.013 & 0.001 & 0.016 & 0.033 & 0.001 & 0.004 &  0.012  \\  %0.001 0.007   0.001
+\hline
 \end{tabular}
+\caption{Experimental results}
 \end{table}
+All distances provide results in the same order of magnitude. In all cases, the best compromise between both indicators is obtained using bigrams. The best results are obtained for the mismatch count technique. 
+
 
 \section{Related work}
 
-todo: el paper de cisc no considera ataques en campos de los http requests que puedan contener caracteres especiales. No va a las frecuencias de n-gramas más largos, solo de caracteres, y caracteres especiales permitidos. Encontrar un ataque en PKDD que contenga casos que no son cubiertos. 
+In \cite{wang2004anomalous}, Wang and Stolfo introduced PAYL, a payload-based anomaly detector for intrusion detection. Their analyser computes the byte frequency distribution of network packets from a training dataset, and compares them to test packets using Mahalanobis distance. The objective was not to detect code injection attacks, but rather worms or other forms of malware propagating on the network. Their work report on excelent results on the 1999 DAPRA IDS dataset. In \cite{wang2006anagram}, they introduce Anagram, which extends PAYL to higher n-grams, with $n>1$. One of the main differences with respect to our work is that Wang and Stolfo's tools are oriented to network traffic, and therefore works on TPC packets, that is, they work on the network OSI layer. On the contrary, we are focused on protecting web applications, so we perform the analysis at OSI's application layer, on the \HTTP packets. Sticking to the application layer enables us to develop a dedicated model for each \HTTP field and application parameter, something that cannot be done at the TCP layer. 
 
-todo: mix of models. email, the best is rank. Explicar que si no ponemos infinity cuando no encontramos un ngram entonces las ocurrencias de simbolos que no están en el alfabeto pesan poco, se camuflan en las diferencias de frecuencia habituales.
+Torrano, Perez and Marañón from the CISC team developed a model which associates the frequencies of of letters, digits and special characters to each application parameter \cite{torrano2010anomaly}. The tool they mixes filter rules and statistical checkings. Filter rules specify the only headers, directories and \HTTP field values that are permitted. Only the web application parameters are subject to statistical checks with respect to the aforementioned attributes. On the contrary, our approach is fully statistical, is based on a less radical abstraction of the field contents and makes use of higer order n-grams. Moreover, it can distinguish attacks that cannot be detected as anomalous cases when all symbols are collapsed in those three categories. Consider for instance a form field for names, and let us assume that there is at least one name in the training dataset containing the left single quotation mark (like \textit{Ed++O'Neil}). The code injection sample \textit{'+\textsc{OR+NOT+LIKE}+'xxxxxxx} results in a SQL query returning all the names in the application database. However, both strings are made of the same symbols and the frequency of spaces and quotation marks is exactly the same, while the number of letters is close enough to fall inside the minimum and maximum occurrences for the field in the training set. The code injection sample has great chances of being considered a valid name according to the model in \cite{torrano2010anomaly}, but is rejected in the n-gram framework we proposed.
 
+\todo{Vigna et all}
 
-\section{Conclusions}
+Other statistical approaches to the detection of web application attacks have been also proposed, for example in \cite{Gallagher}. Those works focus on a negative approach, trying to correlate the ocurrences of some attributes with the code used in the attacks that in the current state of the art. The main difference of our work with respect to them is that we focus on characterising the normal behavior of the web application. This make our approach more plastic and resiliant to variants of known attacks or even to completely new ones. 
 
+%\section{Conclusions}
 
-\subsubsection*{Acknowledgments}
-...
+%A further line of work is to extent this anomaly detection technique to attack classification. This could be achieved by training and storing the signature of different query programming languages, such as SQL, XPath, Unix OS commands, and comparing the anomalous piece of content against those language signatures. To step forward in this direction, a problem to be solved is the generation of training data sets for such languages, necessary to construct their signatures. Such data sets have to be large enough and representative of the state of the art in injection attacks.
 
-In the bibliography, use \texttt{\textbackslash textsuperscript} for ``st'', ``nd'', ...:
-E.g., \enquote{The 2\textsuperscript{nd} conference on examples}.
-When you use \href{http://www.jabref.org}{JabRef}, you can use the clean up command to achieve that.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \bibliographystyle{splncs03}
-\bibliography{paper}
+\bibliography{references}
 
-All links were last followed on October 5, 2014.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \end{document}
